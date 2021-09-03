@@ -1,3 +1,9 @@
+builddir
+
+.vscode
+.cache
+compile_commands.json
+
 # Prerequisites
 *.d
 

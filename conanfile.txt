@@ -1,0 +1,7 @@
+[requires]
+fmt/8.0.0
+flex/2.6.4
+boost/1.76.0
+
+[generators]
+pkg_config
