@@ -2,6 +2,8 @@
 fmt/8.0.0
 flex/2.6.4
 boost/1.76.0
+benchmark/1.5.3
+gtest/1.11.0
 
 [generators]
 pkg_config

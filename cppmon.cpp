@@ -1,11 +1,12 @@
-#include <fmt/core.h>
 #include <fmt/format.h>
-#include "table.h"
+#include <table.h>
+
+void equality_check() { 
+  table<int> tab1({1, 2, 3}, {{5, 6, 7}, {8, 9, 10}}),
+             tab2({1, 2, 4}, {{5, 6, 7}, {8, 9, 10}});
+  fmt::print("{}", tab1);
+}
 
 int main() {
-    fmt::print(FMT_STRING("roflcopter {}\n"), "roflcopter");
-    table<int> tab({1,2,3});
-    table<int> tab2({5,6,7});
-    auto tab3 = tab.natural_join(tab2);
-    return 0;
+    equality_check();
 }
