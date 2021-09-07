@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <absl/hash/hash.h>
 
 namespace tbl_impl {
 template <typename T> class table;
