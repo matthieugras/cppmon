@@ -12,11 +12,11 @@
 #include <iterator>
 #include <memory>
 #include <tuple>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <absl/hash/hash.h>
+#include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
 
 namespace tbl_impl {
 template <typename T> class table;
@@ -26,15 +26,15 @@ using tbl_impl::table;
 
 namespace tbl_impl {
 using std::size_t;
-using std::unordered_map;
-using std::unordered_set;
+using absl::flat_hash_set;
+using absl::flat_hash_map;
 using std::vector;
 
 template <typename T> class table {
   friend struct fmt::formatter<table<T>>;
-  using TblImplType = unordered_set<vector<T>, boost::hash<vector<T>>>;
+  using TblImplType = flat_hash_set<vector<T>>;
   using TblImplPtr = typename TblImplType::const_pointer;
-  using Var2IdxMap = unordered_map<size_t, size_t>;
+  using Var2IdxMap = flat_hash_map<size_t, size_t>;
 
 public:
   explicit table(const vector<size_t> &idx_to_var) {
@@ -87,7 +87,7 @@ public:
     size_t max_common_cols = std::min(n1, n2);
     vector<ptrdiff_t> concat_idx_to_var;
     concat_idx_to_var.reserve(n1 + n2);
-    unordered_map<size_t, size_t> seen_vars;
+    flat_hash_map<size_t, size_t> seen_vars;
     seen_vars.reserve(n1 + n2);
     vector<size_t> comm_idx1, comm_idx2;
     comm_idx1.reserve(max_common_cols);
@@ -106,7 +106,7 @@ public:
       }
     }
 
-    unordered_map<vector<T>, vector<TblImplPtr>, boost::hash<vector<T>>>
+    flat_hash_map<vector<T>, vector<TblImplPtr>>
         hash_map;
     {
       size_t i = 0;
