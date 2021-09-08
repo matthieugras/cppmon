@@ -1,4 +1,5 @@
 builddir
+builddir_debug
 
 .vscode
 .cache
