@@ -25,7 +25,7 @@ bison_bin = find_program('bison', required: true)
 subdir('parsing')
 
 table_src = ['table.h', 'table.cpp']
-table_deps = [fmt,absl_dep,ranges]
+table_deps = [fmt,absl_dep]
 
 sources = ['cppmon.cpp', table_src]
 exe = executable('cppmon', sources,

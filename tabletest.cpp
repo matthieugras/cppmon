@@ -61,7 +61,48 @@ void table_joins() {
   assert(tab1.natural_join(tab2) == tab_res);
 }
 
+void table_union() {
+  table<int> tab1({}, {}), tab2({}, {}), tab3({}, {});
+  assert(tab1.t_union(tab2) == tab3);
+  tab1.t_union_in_place(tab2);
+  assert(tab1 == tab3);
+  tab1 = table<int>({1, 2}, {{1, 2}});
+  tab2 = table<int>({1, 2}, {{1, 2}, {3, 4}});
+  tab3 = table<int>({1, 2}, {{3, 4}, {1, 2}});
+  assert(tab1.t_union(tab2) == tab3);
+  tab1.t_union_in_place(tab2);
+  assert(tab1 == tab3);
+  tab1 = table<int>({2, 3, 1}, {{4, 5, 6}, {7, 8, 9}});
+  tab2 = table<int>({3, 2, 1}, {{7, 6, 5}, {3, 2, 7}});
+  tab3 = table<int>({1, 2, 3}, {{6, 4, 5}, {7, 2, 3}, {9, 7, 8}, {5, 6, 7}});
+  assert(tab1.t_union(tab2) == tab3);
+  tab1.t_union_in_place(tab2);
+  assert(tab1 == tab3);
+  tab1 = table<int>({2, 3, 1}, {{4, 5, 6}, {7, 8, 9}});
+  tab2 = table<int>({3, 2, 1}, {{7, 6, 5}, {3, 2, 7}});
+  tab3 = table<int>({1, 2, 3}, {{6, 4, 5}, {7, 3, 2}, {9, 7, 8}, {5, 6, 7}});
+  assert(tab1.t_union(tab2) != tab3);
+  tab1.t_union_in_place(tab2);
+  assert(tab1 != tab3);
+  tab1 =
+      table<int>({5, 20, 11, 9}, {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}});
+  tab2 = table<int>({11, 9, 20, 5},
+                    {{13, 14, 15, 16}, {17, 18, 19, 20}, {21, 22, 23, 24}});
+  tab3 = table<int>({5, 20, 11, 9}, {{5, 6, 7, 8},
+                                     {1, 2, 3, 4},
+                                     {16, 15, 13, 14},
+                                     {20, 19, 17, 18},
+                                     {9, 10, 11, 12},
+                                     {24, 23, 21, 22}});
+  assert(tab1.t_union(tab2) == tab3);
+  tab1.t_union_in_place(tab2);
+  assert(tab1 == tab3);
+  /*TODO: check why this works tab1 = table<int>({1,2,3},{}), tab2 =
+  table<int>({3,4,5},{}); assert(tab1.anti_join(tab2) == tab3);*/
+}
+
 int main() {
   equality_check();
   table_joins();
+  table_union();
 }

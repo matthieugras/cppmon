@@ -12,11 +12,9 @@
 #include <iterator>
 #include <memory>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
-#include <range/v3/view/transform.hpp>
-#include <range/v3/action/push_back.hpp>
-#include <range/v3/range/conversion.hpp>
 
 namespace tbl_impl {
 template <typename T> class table;
@@ -65,7 +63,6 @@ public:
     bool ret = this->find_permutation(other, permutation);
     if (!ret)
       return false;
-    using namespace ranges;
     for (const auto &row : other.m_tab_impl) {
       vector<T> permuted_row = filter_row(permutation, row);
       if (!this->m_tab_impl.contains(permuted_row))
@@ -117,7 +114,7 @@ public:
     }
     return new_tab;
   }
-  table<T> anti_join(const table<T> &tab) {
+  table<T> anti_join(const table<T> &tab) const {
     vector<ptrdiff_t> idx_to_var2_filtered;
     vector<size_t> comm_idx1, comm_idx2;
     common_col_idxs(*this, tab, idx_to_var2_filtered, comm_idx1, comm_idx2);
@@ -134,19 +131,12 @@ public:
     }
     return new_tab;
   }
+
   table<T> t_union(const table<T> &tab) const {
-    vector<size_t> permutation;
-    bool ret = this->find_permutation(tab, permutation);
-    if (!ret)
-      throw std::invalid_argument("table layouts are incompatible");
-    table<T> new_tab(this->m_col_idxs);
-    new_tab.m_tab_impl = this->m_tab_impl;
-    for (const auto &row : tab.m_tab_impl) {
-      vector<T> permuted_row = filter_row(permutation, row);
-      new_tab.m_tab_impl.insert(permuted_row);
-    }
-    return new_tab;
+    return t_union_impl(*this, tab);
   }
+
+  void t_union_in_place(const table<T> &tab) { t_union_impl(*this, tab); }
 
 private:
   table() = default;
@@ -154,18 +144,46 @@ private:
   using TblImplPtr = typename TblImplType::const_pointer;
   using Var2IdxMap = flat_hash_map<size_t, size_t>;
   using JoinHashTbl = flat_hash_map<vector<T>, vector<TblImplPtr>>;
-  /*
-    Finds correct permutation of table indexes of the other table,
-    returns false if the layouts of the tables are incompatible
-  */
+  size_t m_n_cols;
+  TblImplType m_tab_impl;
+  vector<size_t> idx_to_var;
+  Var2IdxMap var_to_idx;
+
+  template <typename TAB1>
+  static auto t_union_impl(TAB1 &tab1, const table<T> &tab2) {
+    static_assert(std::is_same_v<std::remove_const_t<TAB1>, table<T>>,
+                  "tables must have same type");
+    vector<size_t> permutation;
+    bool ret = tab1.find_permutation(tab2, permutation);
+    if (!ret)
+      throw std::invalid_argument("table layouts are incompatible");
+    if constexpr (std::is_const_v<TAB1>) {
+      table<T> new_tab;
+      new_tab.m_n_cols = tab1.m_n_cols;
+      new_tab.m_tab_impl = tab1.m_tab_impl;
+      new_tab.idx_to_var = tab1.idx_to_var;
+      new_tab.var_to_idx = tab1.var_to_idx;
+      for (const auto &row : tab2.m_tab_impl) {
+        vector<T> permuted_row = filter_row(permutation, row);
+        new_tab.m_tab_impl.insert(std::move(permuted_row));
+      }
+      return new_tab;
+    } else {
+      for (const auto &row : tab2.m_tab_impl) {
+        vector<T> permuted_row = filter_row(permutation, row);
+        tab1.m_tab_impl.insert(std::move(permuted_row));
+      }
+    }
+  }
+
   bool find_permutation(const table<T> &other,
                         vector<size_t> &permutation) const {
     size_t n = this->m_n_cols;
     if (this->m_n_cols != other.m_n_cols)
       return false;
     permutation.reserve(n);
-    for (size_t idx1 = 0; idx1 < n; ++idx1) {
-      const auto it_idx2 = other.var_to_idx.find(this->idx_to_var[idx1]);
+    for (const auto &var: this->idx_to_var) {
+      const auto it_idx2 = other.var_to_idx.find(var);
       if (it_idx2 == other.var_to_idx.end())
         return false;
       permutation.push_back(it_idx2->second);
@@ -177,11 +195,7 @@ private:
     JoinHashTbl hash_map;
     size_t i = 0;
     for (const auto &row : this->m_tab_impl) {
-      vector<T> col_vals;
-      col_vals.reserve(idxs.size());
-      for (const auto &idx : idxs) {
-        col_vals.push_back(row[idx]);
-      }
+      vector<T> col_vals = filter_row(idxs, row);
       hash_map[col_vals].push_back(&row);
       ++i;
     }
@@ -209,17 +223,15 @@ private:
       }
     }
   }
-  static auto filter_row(const vector<size_t> &keep_idxs,
+  static vector<T> filter_row(const vector<size_t> &keep_idxs,
                               const vector<T> &row) {
-    using namespace ranges;
-    return keep_idxs
-            | views::transform([&row](const auto &idx) {return row[idx];})
-            | to<vector>;
+    vector<T> filtered_row;
+    filtered_row.reserve(keep_idxs.size());
+    for (const auto &idx : keep_idxs) {
+      filtered_row.push_back(row[idx]);
+    }
+    return filtered_row;
   }
-  size_t m_n_cols;
-  TblImplType m_tab_impl;
-  vector<size_t> idx_to_var;
-  Var2IdxMap var_to_idx;
 };
 } // namespace tbl_impl
 
