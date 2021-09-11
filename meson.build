@@ -24,16 +24,31 @@ bison_bin = find_program('bison', required: true)
 
 subdir('parsing')
 
-table_src = ['table.h', 'table.cpp']
+main_includes = include_directories('.')
+
+# Table
+table_src = files('table.cpp')
 table_deps = [fmt,absl_dep]
 
-sources = ['cppmon.cpp', table_src]
+sources = [files('cppmon.cpp'), table_src]
 exe = executable('cppmon', sources,
-  install : true, dependencies : [table_deps])
+    install : true, dependencies : [table_deps],
+    include_directories: [main_includes])
 
-table_test_src = [table_src, 'tabletest.cpp']
-table_test = executable('table_test', table_test_src, dependencies: [table_deps])
+table_test_src = [table_src, files('tabletest.cpp')]
+table_test = executable('table_test', table_test_src,
+    dependencies: [table_deps], include_directories: [main_includes])
 test('Table correctness', table_test)
 
-table_bench_src = [table_src, 'tablebench.cpp']
-table_bench = executable('table_bench', table_bench_src, dependencies: [table_deps, benchmark])
+# MFormula definition
+mformula_src = [formula_src]
+mformula_deps = [absl_dep,table_deps]
+mformula_test_src = files('mformulatest.cpp')
+mformula_test = executable('mformula_test', mformula_test_src,
+    dependencies: mformula_deps,
+    include_directories: [main_includes, parser_includes])
+test('MFormula correctness', mformula_test)
+
+table_bench_src = [table_src, files('tablebench.cpp')]
+table_bench = executable('table_bench', table_bench_src,
+    dependencies: [table_deps, benchmark])
