@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <benchmark/benchmark.h>
 #include <cstddef>
-#include <fmt/format.h>
 #include <random>
 #include <table.h>
 #include <utility>
@@ -27,7 +26,7 @@ static table<size_t> random_table(vector<size_t> other_cols,
   for (size_t i = n_common_cols; i < n_cols; ++i) {
     selected_cols.push_back(col_name_dist(rand_gen));
   }
-  std::random_shuffle(selected_cols.begin(), selected_cols.end());
+  std::shuffle(selected_cols.begin(), selected_cols.end(), rand_gen);
   auto value_dist = std::uniform_int_distribution<size_t>(0, max_value);
   for (size_t i = 0; i < n_rows; ++i) {
     vector<size_t> row;

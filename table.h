@@ -17,9 +17,11 @@
 #include <vector>
 
 namespace tbl_impl {
-template <typename T> class table;
+template<typename T>
+class table;
 }
-template <typename T> struct fmt::formatter<tbl_impl::table<T>>;
+template<typename T>
+struct fmt::formatter<tbl_impl::table<T>>;
 using tbl_impl::table;
 
 namespace tbl_impl {
@@ -28,10 +30,11 @@ using absl::flat_hash_set;
 using std::size_t;
 using std::vector;
 
-template <typename T> class table {
+template<typename T>
+class table {
   friend struct fmt::formatter<table<T>>;
 
-public:
+  public:
   explicit table(const vector<size_t> &idx_to_var) {
     size_t n = idx_to_var.size();
     this->m_n_cols = n;
@@ -53,7 +56,7 @@ public:
       this->m_tab_impl.insert(row);
     }
   }
-  const vector<size_t> &var_names() const { return this->idx_to_var; }
+  [[nodiscard]] const vector<size_t> &var_names() const { return this->idx_to_var; }
   bool operator==(const table<T> &other) const {
     if (this->m_n_cols != other.m_n_cols ||
         this->m_tab_impl.size() != other.m_tab_impl.size())
@@ -138,7 +141,7 @@ public:
 
   void t_union_in_place(const table<T> &tab) { t_union_impl(*this, tab); }
 
-private:
+  private:
   table() = default;
   using TblImplType = flat_hash_set<vector<T>>;
   using TblImplPtr = typename TblImplType::const_pointer;
@@ -149,7 +152,7 @@ private:
   vector<size_t> idx_to_var;
   Var2IdxMap var_to_idx;
 
-  template <typename TAB1>
+  template<typename TAB1>
   static auto t_union_impl(TAB1 &tab1, const table<T> &tab2) {
     static_assert(std::is_same_v<std::remove_const_t<TAB1>, table<T>>,
                   "tables must have same type");
@@ -182,7 +185,7 @@ private:
     if (this->m_n_cols != other.m_n_cols)
       return false;
     permutation.reserve(n);
-    for (const auto &var: this->idx_to_var) {
+    for (const auto &var : this->idx_to_var) {
       const auto it_idx2 = other.var_to_idx.find(var);
       if (it_idx2 == other.var_to_idx.end())
         return false;
@@ -233,9 +236,10 @@ private:
     return filtered_row;
   }
 };
-} // namespace tbl_impl
+}// namespace tbl_impl
 
-template <typename T> struct fmt::formatter<table<T>> {
+template<typename T>
+struct fmt::formatter<table<T>> {
   constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
     auto it = ctx.begin();
     if (it != ctx.end() && *it != '}')
@@ -243,10 +247,10 @@ template <typename T> struct fmt::formatter<table<T>> {
                          "accepted for tables");
     return it;
   }
-  template <typename FormatContext>
+  template<typename FormatContext>
   auto format(const table<T> &tab, FormatContext &ctx) -> decltype(ctx.out()) {
     auto new_out =
-        format_to(ctx.out(), "Table with {} columns\n", tab.m_n_cols);
+            format_to(ctx.out(), "Table with {} columns\n", tab.m_n_cols);
     new_out = format_to(new_out, "{}\n", tab.idx_to_var);
     new_out = format_to(new_out, "Table Data:\n");
     for (const auto &row : tab.m_tab_impl) {

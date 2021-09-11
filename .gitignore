@@ -1,5 +1,6 @@
 builddir
 builddir_debug
+.idea
 
 .vscode
 .cache

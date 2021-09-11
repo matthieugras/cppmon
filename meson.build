@@ -35,20 +35,22 @@ exe = executable('cppmon', sources,
     install : true, dependencies : [table_deps],
     include_directories: [main_includes])
 
+# Table test
 table_test_src = [table_src, files('tabletest.cpp')]
 table_test = executable('table_test', table_test_src,
     dependencies: [table_deps], include_directories: [main_includes])
 test('Table correctness', table_test)
 
+# Table benchmark
+table_bench_src = [table_src, files('tablebench.cpp')]
+table_bench = executable('table_bench', table_bench_src,
+    dependencies: [table_deps, benchmark])
+
 # MFormula definition
 mformula_src = [formula_src]
 mformula_deps = [absl_dep,table_deps]
-mformula_test_src = files('mformulatest.cpp')
+mformula_test_src = [mformula_src, files('mformulatest.cpp')]
 mformula_test = executable('mformula_test', mformula_test_src,
     dependencies: mformula_deps,
     include_directories: [main_includes, parser_includes])
 test('MFormula correctness', mformula_test)
-
-table_bench_src = [table_src, files('tablebench.cpp')]
-table_bench = executable('table_bench', table_bench_src,
-    dependencies: [table_deps, benchmark])
