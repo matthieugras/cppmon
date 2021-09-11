@@ -34,9 +34,9 @@ template<typename T>
 class table {
   friend struct fmt::formatter<table<T>>;
 
-  public:
+public:
   explicit table(const vector<size_t> &idx_to_var) {
-    size_t n = idx_to_var.size();
+    size_t n       = idx_to_var.size();
     this->m_n_cols = n;
     if (n == 0)
       return;
@@ -56,7 +56,9 @@ class table {
       this->m_tab_impl.insert(row);
     }
   }
-  [[nodiscard]] const vector<size_t> &var_names() const { return this->idx_to_var; }
+  [[nodiscard]] const vector<size_t> &var_names() const {
+    return this->idx_to_var;
+  }
   bool operator==(const table<T> &other) const {
     if (this->m_n_cols != other.m_n_cols ||
         this->m_tab_impl.size() != other.m_tab_impl.size())
@@ -86,12 +88,12 @@ class table {
     common_col_idxs(*this, tab, idx_to_var2_filtered, comm_idx1, comm_idx2);
     JoinHashTbl hash_map = tab.get_join_hash_table(comm_idx2);
     table<T> new_tab;
-    new_tab.m_n_cols = n1 + n2 - comm_idx1.size();
+    new_tab.m_n_cols   = n1 + n2 - comm_idx1.size();
     new_tab.var_to_idx = this->var_to_idx;
     new_tab.idx_to_var = this->idx_to_var;
     new_tab.idx_to_var.reserve(n1 + n2);
     for (size_t i = 0, count = 0; i < n2; ++i) {
-      size_t idx = n1 + count;
+      size_t idx    = n1 + count;
       ptrdiff_t var = idx_to_var2_filtered[i];
       if (var != -1) {
         new_tab.idx_to_var.push_back(var);
@@ -101,7 +103,7 @@ class table {
     }
     for (const auto &row : this->m_tab_impl) {
       vector<T> col_vals = filter_row(comm_idx1, row);
-      const auto it = hash_map.find(col_vals);
+      const auto it      = hash_map.find(col_vals);
       if (it == hash_map.end())
         continue;
       for (const auto &row2_ptr : it->second) {
@@ -124,7 +126,7 @@ class table {
     JoinHashTbl hash_map = tab.get_join_hash_table(comm_idx2);
     table<T> new_tab;
     new_tab.idx_to_var = this->idx_to_var;
-    new_tab.m_n_cols = this->m_n_cols;
+    new_tab.m_n_cols   = this->m_n_cols;
     new_tab.var_to_idx = this->var_to_idx;
     for (const auto &row : this->m_tab_impl) {
       const auto col_vals = filter_row(comm_idx1, row);
@@ -141,12 +143,14 @@ class table {
 
   void t_union_in_place(const table<T> &tab) { t_union_impl(*this, tab); }
 
-  private:
+private:
   table() = default;
+
   using TblImplType = flat_hash_set<vector<T>>;
-  using TblImplPtr = typename TblImplType::const_pointer;
-  using Var2IdxMap = flat_hash_map<size_t, size_t>;
+  using TblImplPtr  = typename TblImplType::const_pointer;
+  using Var2IdxMap  = flat_hash_map<size_t, size_t>;
   using JoinHashTbl = flat_hash_map<vector<T>, vector<TblImplPtr>>;
+
   size_t m_n_cols;
   TblImplType m_tab_impl;
   vector<size_t> idx_to_var;
@@ -162,7 +166,7 @@ class table {
       throw std::invalid_argument("table layouts are incompatible");
     if constexpr (std::is_const_v<TAB1>) {
       table<T> new_tab;
-      new_tab.m_n_cols = tab1.m_n_cols;
+      new_tab.m_n_cols   = tab1.m_n_cols;
       new_tab.m_tab_impl = tab1.m_tab_impl;
       new_tab.idx_to_var = tab1.idx_to_var;
       new_tab.var_to_idx = tab1.var_to_idx;
@@ -216,7 +220,7 @@ class table {
     comm_idx2.reserve(max_common_cols);
     for (size_t i = 0; i < n2; ++i) {
       size_t var = tab2.idx_to_var[i];
-      auto it = tab1.var_to_idx.find(var);
+      auto it    = tab1.var_to_idx.find(var);
       if (it == tab1.var_to_idx.end()) {
         idx_to_var2_filtered.push_back(var);
       } else {
@@ -247,6 +251,7 @@ struct fmt::formatter<table<T>> {
                          "accepted for tables");
     return it;
   }
+
   template<typename FormatContext>
   auto format(const table<T> &tab, FormatContext &ctx) -> decltype(ctx.out()) {
     auto new_out =

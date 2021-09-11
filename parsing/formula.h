@@ -18,7 +18,7 @@ namespace hana = boost::hana;
 template<typename>
 inline constexpr bool always_false_v = false;
 template<typename T, typename... Os>
-constexpr auto any_type_equal() {
+inline constexpr auto any_type_equal() {
   auto r = hana::any_of(hana::tuple_t<Os...>,
                         [](auto t) { return t == hana::type_c<T>; });
   return r;
@@ -28,9 +28,10 @@ inline constexpr bool any_type_equal_v =
         decltype(any_type_equal<T, Os...>())::value;
 
 template<typename S>
-bool is_subset(S set1, S set2) {
+bool is_subset(const S &set1, const S &set2) {
   for (const auto &elem : set1) {
-    if (!set2.contains(elem)) return false;
+    if (!set2.contains(elem))
+      return false;
   }
   return true;
 }
@@ -41,9 +42,9 @@ namespace detail {
   using std::variant;
   using std::vector;
 
-  using name = std::string;
+  using name       = std::string;
   using event_data = std::size_t;
-  using fv_set = absl::flat_hash_set<size_t>;
+  using fv_set     = absl::flat_hash_set<size_t>;
 
   template<typename T>
   using ptr_type = unique_ptr<T>;
@@ -121,13 +122,22 @@ namespace detail {
   };
 
   struct Formula {
-    variant<Pred, Less, LessEq, Eq, Or, And, Exists, Prev, Next, Since, Until,
-            Neg>
-            val;
+    using val_type = variant<Pred, Less, LessEq, Eq, Or, And, Exists, Prev,
+                             Next, Since, Until, Neg>;
+
+  public:
+    Formula(const Formula &formula);
+    explicit Formula(val_type &&val);
+    explicit Formula(const val_type &val);
     [[nodiscard]] fv_set fvi(size_t nesting_depth) const;
     [[nodiscard]] fv_set comp_fv() const;
-    [[nodiscard]] bool is_safe_assignment() const;
+    [[nodiscard]] bool is_constraint() const;
+    [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
     [[nodiscard]] bool is_safe_formula() const;
+    val_type val;
+
+  private:
+    [[nodiscard]] static val_type copy_val(const val_type &val);
   };
 }// namespace detail
 

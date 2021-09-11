@@ -4,7 +4,7 @@
 
 int main() {
   auto pred = fo::Pred{"rofl", vector<fo::Term>()};
-  auto form = fo::Formula{pred};
+  fo::Formula form = fo::Formula(pred);
   fmt::print("{}", form.is_safe_formula());
   fmt::print("{}\n", form.comp_fv().size());
 }
