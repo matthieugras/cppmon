@@ -1,13 +1,10 @@
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
-#include <boost/hana.hpp>
 #include <formula.h>
 #include <memory>
-#include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace fo::detail {
 

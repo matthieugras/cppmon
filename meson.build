@@ -8,17 +8,13 @@ if get_option('withsan')
   add_global_link_arguments(['-lasan', '-lubsan', '--rtlib=compiler-rt'], language: 'cpp')
 endif
 
-abseil = subproject('abseil-cpp')
-
 ranges = dependency('range-v3')
 fmt = dependency('fmt')
 boost = dependency('boost')
 benchmark = dependency('benchmark')
 gtest = dependency('gtest')
 
-absl_hash = abseil.get_variable('absl_hash_dep')
-absl_container = abseil.get_variable('absl_container_dep')
-absl_dep = [absl_hash, absl_container]
+absl_dep = dependency('abseil')
 flex_bin = find_program('flex', required: true)
 bison_bin = find_program('bison', required: true)
 
@@ -48,7 +44,7 @@ table_bench = executable('table_bench', table_bench_src,
 
 # MFormula definition
 mformula_src = [formula_src]
-mformula_deps = [absl_dep,table_deps]
+mformula_deps = [absl_dep,table_deps,boost]
 mformula_test_src = [mformula_src, files('mformulatest.cpp')]
 mformula_test = executable('mformula_test', mformula_test_src,
     dependencies: mformula_deps,

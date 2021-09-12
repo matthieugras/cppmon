@@ -38,7 +38,6 @@ bool is_subset(const S &set1, const S &set2) {
 
 namespace fo {
 namespace detail {
-  using std::unique_ptr;
   using std::variant;
   using std::vector;
 
@@ -47,7 +46,7 @@ namespace detail {
   using fv_set     = absl::flat_hash_set<size_t>;
 
   template<typename T>
-  using ptr_type = unique_ptr<T>;
+  using ptr_type = std::unique_ptr<T>;
 
   struct Const {
     event_data data;
