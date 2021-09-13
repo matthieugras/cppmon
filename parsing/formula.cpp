@@ -65,7 +65,7 @@ Formula::val_type Formula::copy_val(const val_type &val) {
 }
 
 fv_set Formula::fvi(size_t nesting_depth) const {
-  auto &&visitor = [nesting_depth](auto &&arg) {
+  auto visitor = [nesting_depth](auto &&arg) {
     using T = std::decay_t<decltype(arg)>;
     using std::is_same_v;
     if constexpr (is_same_v<T, Pred>) {

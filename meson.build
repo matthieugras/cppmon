@@ -8,6 +8,7 @@ if get_option('withsan')
   add_global_link_arguments(['-lasan', '-lubsan', '--rtlib=compiler-rt'], language: 'cpp')
 endif
 
+jemalloc = dependency('jemalloc')
 ranges = dependency('range-v3')
 fmt = dependency('fmt')
 boost = dependency('boost')
@@ -40,7 +41,7 @@ test('Table correctness', table_test)
 # Table benchmark
 table_bench_src = [table_src, files('tablebench.cpp')]
 table_bench = executable('table_bench', table_bench_src,
-    dependencies: [table_deps, benchmark])
+    dependencies: [table_deps, benchmark, jemalloc])
 
 # MFormula definition
 mformula_src = [formula_src]
