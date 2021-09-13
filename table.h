@@ -162,8 +162,10 @@ private:
                   "tables must have same type");
     vector<size_t> permutation;
     bool ret = tab1.find_permutation(tab2, permutation);
+#ifndef NDEBUG
     if (!ret)
       throw std::invalid_argument("table layouts are incompatible");
+#endif
     if constexpr (std::is_const_v<TAB1>) {
       table<T> new_tab;
       new_tab.m_n_cols   = tab1.m_n_cols;

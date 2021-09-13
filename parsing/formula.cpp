@@ -8,17 +8,23 @@
 
 namespace fo::detail {
 
+// Interval member function
+Interval::Interval(size_t l, size_t u, bool bounded)
+    : l(l), u(u), bounded(bounded) {
+#ifndef NDEBUG
+  if (bounded && l > u)
+    throw std::invalid_argument("l <= u");
+#endif
+}
+
 // Term member functions
-[[nodiscard]] bool Term::is_const() const {
-  return std::holds_alternative<Const>(term_val);
-}
-[[nodiscard]] bool Term::is_var() const {
-  return std::holds_alternative<Var>(term_val);
-}
-[[nodiscard]] size_t Term::get_var() const {
-  return std::get<Var>(this->term_val).idx;
-}
-[[nodiscard]] fv_set Term::fvi(size_t nesting_depth) const {
+bool Term::is_const() const { return std::holds_alternative<Const>(term_val); }
+
+bool Term::is_var() const { return std::holds_alternative<Var>(term_val); }
+
+size_t Term::get_var() const { return std::get<Var>(this->term_val).idx; }
+
+fv_set Term::fvi(size_t nesting_depth) const {
   size_t var_idx;
   if (this->is_var() &&
       nesting_depth <= (var_idx = std::get<Var>(this->term_val).idx)) {
@@ -27,8 +33,7 @@ namespace fo::detail {
     return {};
   }
 }
-[[nodiscard]] fv_set Term::comp_fv() const { return fvi(0); }
-
+fv_set Term::comp_fv() const { return fvi(0); }
 
 // Formula member functions
 Formula::Formula(const Formula &formula) : val(copy_val(formula.val)) {}
@@ -37,7 +42,7 @@ Formula::Formula(val_type &&val) : val(std::move(val)) {}
 
 Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 
-[[nodiscard]] Formula::val_type Formula::copy_val(const val_type &val) {
+Formula::val_type Formula::copy_val(const val_type &val) {
   auto visitor = [](auto &&arg) -> Formula::val_type {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, Pred, Eq, Less, LessEq>) {
@@ -59,7 +64,7 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
   return std::visit(visitor, val);
 }
 
-[[nodiscard]] fv_set Formula::fvi(size_t nesting_depth) const {
+fv_set Formula::fvi(size_t nesting_depth) const {
   auto &&visitor = [nesting_depth](auto &&arg) {
     using T = std::decay_t<decltype(arg)>;
     using std::is_same_v;
@@ -90,9 +95,17 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
   return std::visit(visitor, this->val);
 }
 
-[[nodiscard]] fv_set Formula::comp_fv() const { return fvi(0); }
+fv_set Formula::comp_fv() const { return fvi(0); }
 
-[[nodiscard]] bool Formula::is_constraint() const {
+size_t Formula::degree() const {
+  fv_set fvs = this->comp_fv();
+  if (fvs.empty())
+    return 0;
+  else
+    return *std::max_element(fvs.begin(), fvs.end()) + 1;
+}
+
+bool Formula::is_constraint() const {
   auto visitor = [](auto &&arg) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, Eq, Less, LessEq>) {
@@ -106,7 +119,7 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
   return std::visit(visitor, this->val);
 }
 
-[[nodiscard]] bool Formula::is_safe_assignment(const fv_set &vars) const {
+bool Formula::is_safe_assignment(const fv_set &vars) const {
   using std::get;
   if (std::holds_alternative<Eq>(this->val)) {
     const auto &t1 = get<Eq>(this->val).l, &t2 = get<Eq>(this->val).r;
@@ -122,7 +135,7 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
   return false;
 }
 
-[[nodiscard]] bool Formula::is_safe_formula() const {
+bool Formula::is_safe_formula() const {
   using std::get;
   using std::is_same_v;
   auto visitor = [](auto &&arg) {
