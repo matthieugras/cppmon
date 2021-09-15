@@ -10,3 +10,7 @@ jemalloc/5.2.1
 
 [generators]
 pkg_config
+
+[options]
+boost:without_locale=True
+boost:without_stacktrace=True

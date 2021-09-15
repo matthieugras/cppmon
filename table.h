@@ -35,11 +35,13 @@ class table {
   friend struct fmt::formatter<table<T>>;
 
 public:
+  // TODO: check uniqueness of unit table, empty table + test cases + join test
+  // cases
+
   explicit table(const vector<size_t> &idx_to_var) {
     size_t n       = idx_to_var.size();
     this->m_n_cols = n;
-    if (n == 0)
-      return;
+    // TODO: check table representation for empty tables
     for (size_t i = 0; i < n; ++i) {
       this->var_to_idx[idx_to_var[i]] = i;
     }
@@ -49,12 +51,18 @@ public:
                  const vector<vector<T>> &data)
       : table(idx_to_var) {
     size_t n = idx_to_var.size();
-    if (n == 0)
-      return;
     for (const auto &row : data) {
       assert(row.size() == n);
       this->m_tab_impl.insert(row);
     }
+  }
+  [[nodiscard]] static table<T> empty_table() { return table({}, {}); };
+  [[nodiscard]] static table<T> unit_table() {
+    // TODO: verify that this is correct
+    return table({}, {{}});
+  }
+  [[nodiscard]] static table<T> singleton_table(size_t var_name, T value) {
+    return table({var_name}, {{value}});
   }
   [[nodiscard]] const vector<size_t> &var_names() const {
     return this->idx_to_var;

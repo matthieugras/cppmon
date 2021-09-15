@@ -8,7 +8,7 @@ if get_option('withsan')
   add_global_link_arguments(['-lasan', '-lubsan', '--rtlib=compiler-rt'], language: 'cpp')
 endif
 
-jemalloc = dependency('jemalloc')
+#jemalloc = dependency('jemalloc')
 ranges = dependency('range-v3')
 fmt = dependency('fmt')
 boost = dependency('boost')
@@ -16,10 +16,10 @@ benchmark = dependency('benchmark')
 gtest = dependency('gtest')
 
 absl_dep = dependency('abseil')
-flex_bin = find_program('flex', required: true)
-bison_bin = find_program('bison', required: true)
+#flex_bin = find_program('flex', required: true)
+#bison_bin = find_program('bison', required: true)
 
-subdir('parsing')
+#subdir('parsing')
 
 main_includes = include_directories('.')
 
@@ -41,13 +41,19 @@ test('Table correctness', table_test)
 # Table benchmark
 table_bench_src = [table_src, files('tablebench.cpp')]
 table_bench = executable('table_bench', table_bench_src,
-    dependencies: [table_deps, benchmark, jemalloc])
+    dependencies: [table_deps, benchmark])
+
+# Formula definition
+formula_src = files('formula.cpp')
+formula_deps = [absl_dep, boost]
 
 # MFormula definition
 mformula_src = [formula_src]
-mformula_deps = [absl_dep,table_deps,boost]
+mformula_deps = [absl_dep,table_deps,boost,formula_deps]
+
+# MFormula test
 mformula_test_src = [mformula_src, files('mformulatest.cpp')]
 mformula_test = executable('mformula_test', mformula_test_src,
     dependencies: mformula_deps,
-    include_directories: [main_includes, parser_includes])
+    include_directories: [main_includes])
 test('MFormula correctness', mformula_test)

@@ -9,7 +9,7 @@ scanner_files = lgen.process('scanner.ll')'''
 
 parser_includes = include_directories('.')
 
-formula_src = files('formula.cpp')
+
 '''lexer_src = [formula_src, parser_files, scanner_files, files('driver.cpp')]
 
 lexer_exe = executable('formula_lexer', lexer_src,

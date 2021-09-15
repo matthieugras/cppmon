@@ -1,10 +1,9 @@
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
 #include <formula.h>
-#include <memory>
 #include <type_traits>
+#include <util.h>
 #include <utility>
-#include <variant>
 
 namespace fo::detail {
 
@@ -17,18 +16,29 @@ Interval::Interval(size_t l, size_t u, bool bounded)
 #endif
 }
 
+bool Interval::contains(size_t n) const {
+  if (!bounded)
+    return n >= l;
+  else
+    return n >= l && n >= u;
+}
+
+bool Interval::is_bounded() const { return bounded; }
+
 // Term member functions
-bool Term::is_const() const { return std::holds_alternative<Const>(term_val); }
+bool Term::is_const() const { return holds_alternative<Const>(term_val); }
 
-bool Term::is_var() const { return std::holds_alternative<Var>(term_val); }
+bool Term::is_var() const { return holds_alternative<Var>(term_val); }
 
-size_t Term::get_var() const { return std::get<Var>(this->term_val).idx; }
+size_t Term::get_var() const { return var2::get<Var>(term_val).idx; }
+
+const event_data &Term::get_const() const {
+  return var2::get<Const>(term_val).data;
+}
 
 fv_set Term::fvi(size_t nesting_depth) const {
-  size_t var_idx;
-  if (this->is_var() &&
-      nesting_depth <= (var_idx = std::get<Var>(this->term_val).idx)) {
-    return fv_set({var_idx - nesting_depth});
+  if (const Var *ptr = var2::get_if<Var>(&term_val); ptr) {
+    return fv_set({ptr->idx - nesting_depth});
   } else {
     return {};
   }
@@ -36,7 +46,9 @@ fv_set Term::fvi(size_t nesting_depth) const {
 fv_set Term::comp_fv() const { return fvi(0); }
 
 // Formula member functions
-Formula::Formula(const Formula &formula) : val(copy_val(formula.val)) {}
+Formula::Formula(const Formula &formula)
+    : val(copy_val(formula.val)), m_safe_formula(formula.m_safe_formula),
+      m_future_bounded(formula.m_future_bounded) {}
 
 Formula::Formula(val_type &&val) : val(std::move(val)) {}
 
@@ -48,20 +60,19 @@ Formula::val_type Formula::copy_val(const val_type &val) {
     if constexpr (any_type_equal_v<T, Pred, Eq, Less, LessEq>) {
       return arg;
     } else if constexpr (any_type_equal_v<T, Neg, Exists>) {
-      return T{std::make_unique<Formula>(copy_val(arg.phi->val))};
+      return T{uniq(copy_val(arg.phi->val))};
     } else if constexpr (any_type_equal_v<T, Or, And>) {
-      return T{std::make_unique<Formula>(copy_val(arg.phil->val)),
-               std::make_unique<Formula>(copy_val(arg.phir->val))};
+      return T{uniq(copy_val(arg.phil->val)), uniq(copy_val(arg.phir->val))};
     } else if constexpr (any_type_equal_v<T, Prev, Next>) {
-      return T{arg.inter, std::make_unique<Formula>(copy_val(arg.phi->val))};
+      return T{arg.inter, uniq(copy_val(arg.phi->val))};
     } else if constexpr (any_type_equal_v<T, Since, Until>) {
-      return T{arg.inter, std::make_unique<Formula>(copy_val(arg.phil->val)),
-               std::make_unique<Formula>(copy_val(arg.phir->val))};
+      return T{arg.inter, uniq(copy_val(arg.phil->val)),
+               uniq(copy_val(arg.phir->val))};
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
   };
-  return std::visit(visitor, val);
+  return var2::visit(visitor, val);
 }
 
 fv_set Formula::fvi(size_t nesting_depth) const {
@@ -92,13 +103,13 @@ fv_set Formula::fvi(size_t nesting_depth) const {
       static_assert(always_false_v<T>, "not exhaustive");
     }
   };
-  return std::visit(visitor, this->val);
+  return var2::visit(visitor, val);
 }
 
 fv_set Formula::comp_fv() const { return fvi(0); }
 
 size_t Formula::degree() const {
-  fv_set fvs = this->comp_fv();
+  fv_set fvs = comp_fv();
   if (fvs.empty())
     return 0;
   else
@@ -116,13 +127,13 @@ bool Formula::is_constraint() const {
       return false;
     }
   };
-  return std::visit(visitor, this->val);
+  return var2::visit(visitor, val);
 }
 
 bool Formula::is_safe_assignment(const fv_set &vars) const {
-  using std::get;
-  if (std::holds_alternative<Eq>(this->val)) {
-    const auto &t1 = get<Eq>(this->val).l, &t2 = get<Eq>(this->val).r;
+  using var2::get;
+  if (const Eq *ptr = var2::get_if<Eq>(&val)) {
+    const auto &t1 = ptr->l, &t2 = ptr->r;
     if (t1.is_var() && t2.is_var()) {
       size_t var1 = t1.get_var(), var2 = t2.get_var();
       return vars.contains(var1) != vars.contains(var2);
@@ -135,9 +146,9 @@ bool Formula::is_safe_assignment(const fv_set &vars) const {
   return false;
 }
 
-bool Formula::is_safe_formula() const {
-  using std::get;
+bool Formula::is_monitorable() const {
   using std::is_same_v;
+  using var2::get;
   auto visitor = [](auto &&arg) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (is_same_v<T, Eq>) {
@@ -147,47 +158,49 @@ bool Formula::is_safe_formula() const {
     } else if constexpr (any_type_equal_v<T, Less, LessEq>) {
       return false;
     } else if constexpr (is_same_v<T, Neg>) {
-      if (std::holds_alternative<Eq>(arg.phi->val)) {
-        const auto &t1 = get<Eq>(arg.phi->val).l, &t2 = get<Eq>(arg.phi->val).r;
+      if (const auto *ptr = var2::get_if<Eq>(&arg.phi->val)) {
+        const auto &t1 = ptr->l, &t2 = ptr->r;
         if (t1.is_var() && t2.is_var())
           return t1.get_var() == t2.get_var();
       }
-      return arg.phi->comp_fv().empty() && arg.phi->is_safe_formula();
+      return arg.phi->comp_fv().empty() && arg.phi->is_monitorable();
     } else if constexpr (is_same_v<T, Pred>) {
-      return std::all_of(arg.pred_args.begin(), arg.pred_args.end(),
-                         [](auto &&t) { return t.is_var() || t.is_const(); });
+      return std::all_of(
+        arg.pred_args.begin(), arg.pred_args.end(),
+        [](const auto &t) { return t.is_var() || t.is_const(); });
     } else if constexpr (is_same_v<T, Or>) {
       const auto &[phil, phir] = arg;
       auto fvl = phil->comp_fv(), fvr = phir->comp_fv();
       if (fvl != fvr)
         return false;
-      return phil->is_safe_formula() && phir->is_safe_formula();
+      return phil->is_monitorable() && phir->is_monitorable();
     } else if constexpr (is_same_v<T, And>) {
       const auto &[phil, phir] = arg;
-      if (!phil->is_safe_formula())
+      if (!phil->is_monitorable())
         return false;
-      if (phir->is_safe_assignment(phil->comp_fv()) || phir->is_safe_formula())
+      if (phir->is_safe_assignment(phil->comp_fv()) || phir->is_monitorable())
         return true;
       if (!is_subset(phir->comp_fv(), phil->comp_fv()))
         return false;
+      const auto *neg_ptr = var2::get_if<Neg>(&phir->val);
       return phir->is_constraint() ||
-             (std::holds_alternative<Neg>(phir->val) &&
-              std::get<Neg>(phir->val).phi->is_safe_formula());
+             (neg_ptr && neg_ptr->phi->is_monitorable());
     } else if constexpr (any_type_equal_v<T, Exists, Prev, Next>) {
-      return arg.phi->is_safe_formula();
+      return arg.phi->is_monitorable();
     } else if constexpr (any_type_equal_v<T, Since, Until>) {
-      const auto &phil = arg.phil, &phir = arg.phir;
-      if (is_subset(phil->comp_fv(), phir->comp_fv()) &&
-          phil->is_safe_formula())
-        return true;
-      if (!arg.phir->is_safe_formula())
+      if (!arg.inter.is_bounded())
         return false;
-      return (std::holds_alternative<Neg>(phil->val) &&
-              get<Neg>(phil->val).phi->is_safe_formula());
+      const auto &phil = arg.phil, &phir = arg.phir;
+      if (is_subset(phil->comp_fv(), phir->comp_fv()) && phil->is_monitorable())
+        return true;
+      if (!arg.phir->is_monitorable())
+        return false;
+      const auto *neg_ptr = var2::get_if<Neg>(&phil->val);
+      return (neg_ptr && neg_ptr->phi->is_monitorable());
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
   };
-  return std::visit(visitor, this->val);
+  return var2::visit(visitor, val);
 }
 }// namespace fo::detail
