@@ -21,7 +21,7 @@ template<typename T>
 class table;
 }
 template<typename T>
-struct fmt::formatter<tbl_impl::table<T>>;
+struct [[maybe_unused]] fmt::formatter<tbl_impl::table<T>>;
 using tbl_impl::table;
 
 namespace tbl_impl {
@@ -35,27 +35,28 @@ class table {
   friend struct fmt::formatter<table<T>>;
 
 public:
-  // TODO: check uniqueness of unit table, empty table + test cases + join test
-  // cases
-
-  explicit table(const vector<size_t> &idx_to_var) {
-    size_t n       = idx_to_var.size();
-    this->m_n_cols = n;
-    // TODO: check table representation for empty tables
+  explicit table(vector<size_t> idx_to_var) {
+    size_t n = idx_to_var.size();
+    m_n_cols = n;
     for (size_t i = 0; i < n; ++i) {
       this->var_to_idx[idx_to_var[i]] = i;
     }
-    this->idx_to_var = idx_to_var;
+    this->idx_to_var = std::move(idx_to_var);
   }
-  explicit table(const vector<size_t> &idx_to_var,
-                 const vector<vector<T>> &data)
-      : table(idx_to_var) {
-    size_t n = idx_to_var.size();
-    for (const auto &row : data) {
-      assert(row.size() == n);
-      this->m_tab_impl.insert(row);
-    }
+  explicit table(vector<size_t> idx_to_var, vector<vector<T>> data)
+      : table(std::move(idx_to_var)) {
+#ifndef NDEBUG
+    size_t n = m_n_cols;
+    bool table_match =
+      std::all_of(data.cbegin(), data.cend(),
+                  [n](const auto &row) { return row.size() == n; });
+    if (!table_match)
+      fmt::print(FMT_STRING("Table missmatch {} {}"), idx_to_var, data);
+#endif
+    m_tab_impl.template insert(std::make_move_iterator(data.begin()),
+                               std::make_move_iterator(data.end()));
   }
+  // TODO: there can be more than one empty table - check this
   [[nodiscard]] static table<T> empty_table() { return table({}, {}); };
   [[nodiscard]] static table<T> unit_table() {
     // TODO: verify that this is correct
@@ -77,7 +78,7 @@ public:
     if (!ret)
       return false;
     for (const auto &row : other.m_tab_impl) {
-      vector<T> permuted_row = filter_row(permutation, row);
+      auto permuted_row = filter_row(permutation, row);
       if (!this->m_tab_impl.contains(permuted_row))
         return false;
     }
@@ -96,12 +97,12 @@ public:
     common_col_idxs(*this, tab, idx_to_var2_filtered, comm_idx1, comm_idx2);
     JoinHashTbl hash_map = tab.get_join_hash_table(comm_idx2);
     table<T> new_tab;
-    new_tab.m_n_cols   = n1 + n2 - comm_idx1.size();
+    new_tab.m_n_cols = n1 + n2 - comm_idx1.size();
     new_tab.var_to_idx = this->var_to_idx;
     new_tab.idx_to_var = this->idx_to_var;
     new_tab.idx_to_var.reserve(n1 + n2);
     for (size_t i = 0, count = 0; i < n2; ++i) {
-      size_t idx    = n1 + count;
+      size_t idx = n1 + count;
       ptrdiff_t var = idx_to_var2_filtered[i];
       if (var != -1) {
         new_tab.idx_to_var.push_back(var);
@@ -110,8 +111,8 @@ public:
       }
     }
     for (const auto &row : this->m_tab_impl) {
-      vector<T> col_vals = filter_row(comm_idx1, row);
-      const auto it      = hash_map.find(col_vals);
+      auto col_vals = filter_row(comm_idx1, row);
+      const auto it = hash_map.find(col_vals);
       if (it == hash_map.end())
         continue;
       for (const auto &row2_ptr : it->second) {
@@ -134,7 +135,7 @@ public:
     JoinHashTbl hash_map = tab.get_join_hash_table(comm_idx2);
     table<T> new_tab;
     new_tab.idx_to_var = this->idx_to_var;
-    new_tab.m_n_cols   = this->m_n_cols;
+    new_tab.m_n_cols = this->m_n_cols;
     new_tab.var_to_idx = this->var_to_idx;
     for (const auto &row : this->m_tab_impl) {
       const auto col_vals = filter_row(comm_idx1, row);
@@ -155,8 +156,8 @@ private:
   table() = default;
 
   using TblImplType = flat_hash_set<vector<T>>;
-  using TblImplPtr  = typename TblImplType::const_pointer;
-  using Var2IdxMap  = flat_hash_map<size_t, size_t>;
+  using TblImplPtr = typename TblImplType::const_pointer;
+  using Var2IdxMap = flat_hash_map<size_t, size_t>;
   using JoinHashTbl = flat_hash_map<vector<T>, vector<TblImplPtr>>;
 
   size_t m_n_cols;
@@ -176,18 +177,18 @@ private:
 #endif
     if constexpr (std::is_const_v<TAB1>) {
       table<T> new_tab;
-      new_tab.m_n_cols   = tab1.m_n_cols;
+      new_tab.m_n_cols = tab1.m_n_cols;
       new_tab.m_tab_impl = tab1.m_tab_impl;
       new_tab.idx_to_var = tab1.idx_to_var;
       new_tab.var_to_idx = tab1.var_to_idx;
       for (const auto &row : tab2.m_tab_impl) {
-        vector<T> permuted_row = filter_row(permutation, row);
+        auto permuted_row = filter_row(permutation, row);
         new_tab.m_tab_impl.insert(std::move(permuted_row));
       }
       return new_tab;
     } else {
       for (const auto &row : tab2.m_tab_impl) {
-        vector<T> permuted_row = filter_row(permutation, row);
+        auto permuted_row = filter_row(permutation, row);
         tab1.m_tab_impl.insert(std::move(permuted_row));
       }
     }
@@ -212,7 +213,7 @@ private:
     JoinHashTbl hash_map;
     size_t i = 0;
     for (const auto &row : this->m_tab_impl) {
-      vector<T> col_vals = filter_row(idxs, row);
+      auto col_vals = filter_row(idxs, row);
       hash_map[col_vals].push_back(&row);
       ++i;
     }
@@ -230,7 +231,7 @@ private:
     comm_idx2.reserve(max_common_cols);
     for (size_t i = 0; i < n2; ++i) {
       size_t var = tab2.idx_to_var[i];
-      auto it    = tab1.var_to_idx.find(var);
+      auto it = tab1.var_to_idx.find(var);
       if (it == tab1.var_to_idx.end()) {
         idx_to_var2_filtered.push_back(var);
       } else {
@@ -244,17 +245,18 @@ private:
                               const vector<T> &row) {
     vector<T> filtered_row;
     filtered_row.reserve(keep_idxs.size());
-    for (const auto &idx : keep_idxs) {
-      filtered_row.push_back(row[idx]);
-    }
+    std::transform(keep_idxs.cbegin(), keep_idxs.cend(),
+                   std::back_inserter(filtered_row),
+                   [&row](size_t idx) { return static_cast<T>(row[idx]); });
     return filtered_row;
   }
 };
 }// namespace tbl_impl
 
 template<typename T>
-struct fmt::formatter<table<T>> {
-  constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
+struct [[maybe_unused]] fmt::formatter<table<T>> {
+  constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
+  -> decltype(ctx.begin()) {
     auto it = ctx.begin();
     if (it != ctx.end() && *it != '}')
       throw format_error("invalid format - only empty format strings are "
@@ -263,13 +265,17 @@ struct fmt::formatter<table<T>> {
   }
 
   template<typename FormatContext>
-  auto format(const table<T> &tab, FormatContext &ctx) -> decltype(ctx.out()) {
+  auto format [[maybe_unused]] (const table<T> &tab, FormatContext &ctx)
+  -> decltype(ctx.out()) {
     auto new_out =
-            format_to(ctx.out(), "Table with {} columns\n", tab.m_n_cols);
+      format_to(ctx.out(), "Table with {} columns\n", tab.m_n_cols);
     new_out = format_to(new_out, "{}\n", tab.idx_to_var);
-    new_out = format_to(new_out, "Table Data:\n");
-    for (const auto &row : tab.m_tab_impl) {
-      new_out = format_to(new_out, "{}\n", row);
+    new_out = format_to(new_out, "Table Data:");
+    if (tab.m_tab_impl.empty())
+      new_out = format_to(new_out, "\nnone");
+    else {
+      for (const auto &row : tab.m_tab_impl)
+        new_out = format_to(new_out, "\n{}", row);
     }
     return new_out;
   }

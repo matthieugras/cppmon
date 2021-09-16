@@ -22,9 +22,9 @@ namespace detail {
   using var2::holds_alternative;
   using var2::variant;
 
-  using name       = std::string;
+  using name = std::string;
   using event_data = std::size_t;
-  using fv_set     = absl::flat_hash_set<size_t>;
+  using fv_set = absl::flat_hash_set<size_t>;
 
   template<typename T>
   using ptr_type = std::unique_ptr<T>;
@@ -47,11 +47,11 @@ namespace detail {
     [[nodiscard]] bool is_var() const;
     [[nodiscard]] size_t get_var() const;
     [[nodiscard]] const event_data &get_const() const;
-    [[nodiscard]] fv_set comp_fv() const;
+    [[nodiscard]] fv_set fvs() const;
+    variant<Const, Var> term_val;
 
   private:
-    [[nodiscard]] fv_set fvi(size_t nesting_depth) const;
-    variant<Const, Var> term_val;
+    [[nodiscard]] fv_set fvi(size_t num_bound_vars) const;
   };
 
   class Interval {
@@ -116,6 +116,10 @@ namespace detail {
   struct Until {
     Interval inter;
     ptr_type<Formula> phil, phir;
+    /*Until(Interval &&inter, Formula &&phil, Formula &&phir)
+        : inter(std::forward<Interval>(inter)),
+          phil(std::make_unique<Formula>(phil)),
+          phir(std::make_unique<Formula>(phir)){};*/
   };
 
   struct Formula {
@@ -125,33 +129,23 @@ namespace detail {
     using val_type = variant<Pred, Less, LessEq, Eq, Or, And, Exists, Prev,
                              Next, Since, Until, Neg>;
     Formula(const Formula &formula);
-    template<typename T>
-    Formula(T &&arg) : val(std::forward<decltype(arg)>(arg)) {}
     explicit Formula(val_type &&val);
     explicit Formula(const val_type &val);
-    [[nodiscard]] fv_set comp_fv() const;
+    [[nodiscard]] fv_set fvs() const;
     [[nodiscard]] size_t degree() const;
     [[nodiscard]] bool is_constraint() const;
     [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
-    [[nodiscard]] bool is_future_bounded() const { return false; }
-    [[nodiscard]] bool is_safe_formula() const {
-      // TODO: create implementation
-      return false;
-    }
+    [[nodiscard]] bool is_future_bounded() const;
+    [[nodiscard]] bool is_safe_formula() const;
     [[nodiscard]] bool is_monitorable() const;
 
   private:
     [[nodiscard]] static val_type copy_val(const val_type &val);
-    [[nodiscard]] fv_set fvi(size_t nesting_depth) const;
+    [[nodiscard]] fv_set fvi(size_t num_bound_vars) const;
     static inline constexpr auto uniq = [](auto &&arg) -> decltype(auto) {
       return std::make_unique<Formula>(std::forward<decltype(arg)>(arg));
     };
     val_type val;
-    fv_set m_fvs;
-    bool m_safe_formula;
-    bool m_future_bounded;
-    bool m_safe_assignment;
-    bool m_constraint;
   };
 }// namespace detail
 

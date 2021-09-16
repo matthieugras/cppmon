@@ -130,7 +130,7 @@ namespace detail {
     static val_type convert_and_to_state(const fo::And &arg,
                                          size_t n_bound_vars) {
       const auto &phil = arg.phil, &phir = arg.phir;
-      if (phir->is_safe_assignment(phil->comp_fv())) {
+      if (phir->is_safe_assignment(phil->fvs())) {
         return MAndRel{};
       } else if (phir->is_safe_formula()) {
         auto l_state = MState(fo_2_state(*phil, n_bound_vars)),
@@ -155,7 +155,7 @@ namespace detail {
         using std::is_same_v;
 
         if constexpr (is_same_v<T, fo::Neg>) {
-          if (arg.phi->comp_fv().empty())
+          if (arg.phi->fvs().empty())
             return MNeg{uniq(MState{fo_2_state(*arg.phi, n_bound_vars)})};
           else
             return MRel{table_type::empty_table()};

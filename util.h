@@ -1,6 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <algorithm>
 #include <boost/hana.hpp>
 
 namespace detail {
@@ -15,15 +16,12 @@ inline constexpr auto any_type_equal() {
 }
 template<typename T, typename... Os>
 inline constexpr bool any_type_equal_v =
-        decltype(any_type_equal<T, Os...>())::value;
+  decltype(any_type_equal<T, Os...>())::value;
 
 template<typename S>
 bool is_subset(const S &set1, const S &set2) {
-  for (const auto &elem : set1) {
-    if (!set2.contains(elem))
-      return false;
-  }
-  return true;
+  return std::all_of(set1.begin(), set1.end(),
+                     [&set2](const auto &elem) { return set2.contains(elem); });
 }
 template<class... Ts>
 struct overloaded : Ts... {

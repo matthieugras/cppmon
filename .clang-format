@@ -3,7 +3,7 @@ BasedOnStyle: LLVM
 EmptyLineBeforeAccessModifier: LogicalBlock
 AccessModifierOffset: -2
 AlignAfterOpenBracket: Align
-AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveAssignments: None
 AlignOperands: Align
 AllowShortEnumsOnASingleLine: false
 AllowAllArgumentsOnNextLine: false
