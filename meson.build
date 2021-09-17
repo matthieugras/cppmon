@@ -49,4 +49,5 @@ mformula_deps = [absl_dep,table_deps,boost,formula_deps]
 test_src = [files('test_main.cpp', 'tabletest.cpp', 'formulatest.cpp', 'mformulatest.cpp'),
     mformula_src, formula_src]
 test_deps = [gtest, fmt, mformula_deps, formula_deps, table_deps]
-test_exe = executable('test_exe', test_src, dependencies: test_deps)
+test_exe = executable('test_exe', test_src,
+    dependencies: test_deps, include_directories: [main_includes])

@@ -256,7 +256,7 @@ private:
 template<typename T>
 struct [[maybe_unused]] fmt::formatter<table<T>> {
   constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
-  -> decltype(ctx.begin()) {
+  -> decltype(auto) {
     auto it = ctx.begin();
     if (it != ctx.end() && *it != '}')
       throw format_error("invalid format - only empty format strings are "
@@ -266,7 +266,7 @@ struct [[maybe_unused]] fmt::formatter<table<T>> {
 
   template<typename FormatContext>
   auto format [[maybe_unused]] (const table<T> &tab, FormatContext &ctx)
-  -> decltype(ctx.out()) {
+  -> decltype(auto) {
     auto new_out =
       format_to(ctx.out(), "Table with {} columns\n", tab.m_n_cols);
     new_out = format_to(new_out, "{}\n", tab.idx_to_var);

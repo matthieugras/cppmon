@@ -65,72 +65,24 @@ namespace detail {
     bool bounded;
   };
 
-  struct Pred {
-    name pred_name;
-    vector<Term> pred_args;
-  };
-
-  struct Eq {
-    Term l, r;
-  };
-
-  struct Less {
-    Term l, r;
-  };
-
-  struct LessEq {
-    Term l, r;
-  };
-
-  struct Neg {
-    ptr_type<Formula> phi;
-  };
-
-  struct Or {
-    ptr_type<Formula> phil, phir;
-  };
-
-  struct And {
-    ptr_type<Formula> phil, phir;
-  };
-
-  struct Exists {
-    ptr_type<Formula> phi;
-  };
-
-  struct Prev {
-    Interval inter;
-    ptr_type<Formula> phi;
-  };
-
-  struct Next {
-    Interval inter;
-    ptr_type<Formula> phi;
-  };
-
-  struct Since {
-    Interval inter;
-    ptr_type<Formula> phil, phir;
-  };
-
-  struct Until {
-    Interval inter;
-    ptr_type<Formula> phil, phir;
-    /*Until(Interval &&inter, Formula &&phil, Formula &&phir)
-        : inter(std::forward<Interval>(inter)),
-          phil(std::make_unique<Formula>(phil)),
-          phir(std::make_unique<Formula>(phir)){};*/
-  };
-
   struct Formula {
     friend class ::mfo::detail::MState;
 
   public:
-    using val_type = variant<Pred, Less, LessEq, Eq, Or, And, Exists, Prev,
-                             Next, Since, Until, Neg>;
     Formula(const Formula &formula);
-    explicit Formula(val_type &&val);
-    explicit Formula(const val_type &val);
+    Formula(Formula &&formula) noexcept;
+    static Formula Pred(name pred_name, vector<Term> pred_args);
+    static Formula Eq(Term l, Term r);
+    static Formula Less(Term l, Term r);
+    static Formula LessEq(Term l, Term r);
+    static Formula Neg(Formula phi);
+    static Formula Or(Formula phil, Formula phir);
+    static Formula And(Formula phil, Formula phir);
+    static Formula Exists(Formula phi);
+    static Formula Prev(Interval inter, Formula phi);
+    static Formula Next(Interval inter, Formula phi);
+    static Formula Since(Interval inter, Formula phil, Formula phir);
+    static Formula Until(Interval inter, Formula phil, Formula phir);
     [[nodiscard]] fv_set fvs() const;
     [[nodiscard]] size_t degree() const;
     [[nodiscard]] bool is_constraint() const;
@@ -140,34 +92,80 @@ namespace detail {
     [[nodiscard]] bool is_monitorable() const;
 
   private:
+    struct pred_t {
+      name pred_name;
+      vector<Term> pred_args;
+    };
+
+    struct eq_t {
+      Term l, r;
+    };
+
+    struct less_t {
+      Term l, r;
+    };
+
+    struct less_eq_t {
+      Term l, r;
+    };
+
+    struct neg_t {
+      ptr_type<Formula> phi;
+    };
+
+    struct or_t {
+      ptr_type<Formula> phil, phir;
+    };
+
+    struct and_t {
+      ptr_type<Formula> phil, phir;
+    };
+
+    struct exists_t {
+      ptr_type<Formula> phi;
+    };
+
+    struct prev_t {
+      Interval inter;
+      ptr_type<Formula> phi;
+    };
+
+    struct next_t {
+      Interval inter;
+      ptr_type<Formula> phi;
+    };
+
+    struct since_t {
+      Interval inter;
+      ptr_type<Formula> phil, phir;
+    };
+
+    struct until_t {
+      Interval inter;
+      ptr_type<Formula> phil, phir;
+    };
+    using val_type = variant<pred_t, less_t, less_eq_t, eq_t, or_t, and_t,
+                             exists_t, prev_t, next_t, since_t, until_t, neg_t>;
+    explicit Formula(val_type &&val);
+    explicit Formula(const val_type &val);
     [[nodiscard]] static val_type copy_val(const val_type &val);
     [[nodiscard]] fv_set fvi(size_t num_bound_vars) const;
-    static inline constexpr auto uniq = [](auto &&arg) -> decltype(auto) {
-      return std::make_unique<Formula>(std::forward<decltype(arg)>(arg));
-    };
+    // Like make_unique, but we can't use it because of private constructors
+    template<typename F>
+    static inline std::unique_ptr<Formula> uniq(F &&arg) {
+      return std::unique_ptr<Formula>(new Formula(std::forward<F>(arg)));
+    }
     val_type val;
   };
 }// namespace detail
 
-using detail::And;
 using detail::Const;
-using detail::Eq;
 using detail::event_data;
-using detail::Exists;
 using detail::Formula;
 using detail::fv_set;
 using detail::Interval;
-using detail::Less;
-using detail::LessEq;
 using detail::name;
-using detail::Neg;
-using detail::Next;
-using detail::Or;
-using detail::Pred;
-using detail::Prev;
-using detail::Since;
 using detail::Term;
-using detail::Until;
 using detail::Var;
 
 }// namespace fo
