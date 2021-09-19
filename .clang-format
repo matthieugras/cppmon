@@ -18,6 +18,12 @@ AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterReturnType: None
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Custom
+RawStringFormats:
+  - Language: Cpp
+    Delimiters:
+      - 'jj'
+    BasedOnStyle: Google
+    CanonicalDelimiter: 'jj'
 BraceWrapping:
   AfterCaseLabel: false
   AfterClass: false

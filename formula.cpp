@@ -156,7 +156,7 @@ Term::val_type Term::copy_val(const val_type &val) {
     if constexpr (any_type_equal_v<T, event_t, var_t>) {
       return arg;
     } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
-      return copy_val(arg.t->val);
+      return T{uniq(copy_val(arg.t->val))};
     } else if constexpr (any_type_equal_v<T, plus_t, minus_t, mult_t, div_t,
                                           mod_t>) {
       return T{uniq(copy_val(arg.l->val)), uniq(copy_val(arg.r->val))};
@@ -192,11 +192,29 @@ bool Term::is_const() const { return holds_alternative<event_t>(val); }
 bool Term::is_var() const { return holds_alternative<var_t>(val); }
 size_t Term::get_var() const { return var2::get<var_t>(val).idx; }
 fv_set Term::fvi(size_t num_bound_vars) const {
-  if (const var_t *ptr = var2::get_if<var_t>(&val); ptr) {
-    return fv_set({ptr->idx - num_bound_vars});
-  } else {
-    return {};
-  }
+  auto visitor = [num_bound_vars](auto &&arg) -> fv_set {
+    using T = std::decay_t<decltype(arg)>;
+
+    if constexpr (std::is_same_v<T, var_t>) {
+      if (arg.idx >= num_bound_vars) {
+        return fv_set({arg.idx - num_bound_vars});
+      } else {
+        return {};
+      }
+    } else if constexpr (any_type_equal_v<T, plus_t, minus_t, mult_t, div_t,
+                                          mod_t>) {
+      auto fvs1 = arg.l->fvi(num_bound_vars), fvs2 = arg.r->fvi(num_bound_vars);
+      fvs1.insert(fvs2.begin(), fvs2.end());
+      return fvs1;
+    } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
+      return arg.t->fvi(num_bound_vars);
+    } else if constexpr (std::is_same_v<T, event_t>) {
+      return {};
+    } else {
+      static_assert(always_false_v<T>, "not exhaustive");
+    }
+  };
+  return var2::visit(visitor, val);
 }
 fv_set Term::fvs() const { return fvi(0); }
 
@@ -378,11 +396,8 @@ fv_set Formula::fvi(size_t num_bound_vars) const {
 fv_set Formula::fvs() const { return fvi(0); }
 
 size_t Formula::degree() const {
-  fv_set this_fvs = fvs();
-  if (this_fvs.empty())
-    return 0;
-  else
-    return *std::max_element(this_fvs.begin(), this_fvs.end()) + 1;
+  auto this_fvs = fvs();
+  return this_fvs.size();
 }
 
 bool Formula::is_constraint() const {
@@ -432,40 +447,40 @@ bool Formula::is_safe_formula() const {
         if (t1.is_var() && t2.is_var())
           return t1.get_var() == t2.get_var();
       }
-      return arg.phi->fvs().empty() && arg.phi->is_monitorable();
+      return arg.phi->fvs().empty() && arg.phi->is_safe_formula();
     } else if constexpr (is_same_v<T, pred_t>) {
       return std::all_of(
-        arg.pred_args.begin(), arg.pred_args.end(),
-        [](const auto &t) { return t.is_var() || t.is_const(); });
+        arg.pred_args.cbegin(), arg.pred_args.cend(),
+        [](const Term &t) { return t.is_var() || t.is_const(); });
     } else if constexpr (is_same_v<T, or_t>) {
       const auto &[phil, phir] = arg;
       auto fvl = phil->fvs(), fvr = phir->fvs();
       if (fvl != fvr)
         return false;
-      return phil->is_monitorable() && phir->is_monitorable();
+      return phil->is_safe_formula() && phir->is_safe_formula();
     } else if constexpr (is_same_v<T, and_t>) {
       const auto &[phil, phir] = arg;
-      if (!phil->is_monitorable())
+      if (!phil->is_safe_formula())
         return false;
-      if (phir->is_safe_assignment(phil->fvs()) || phir->is_monitorable())
+      if (phir->is_safe_assignment(phil->fvs()) || phir->is_safe_formula())
         return true;
       if (!is_subset(phir->fvs(), phil->fvs()))
         return false;
       const auto *neg_ptr = var2::get_if<neg_t>(&phir->val);
       return phir->is_constraint() ||
-             (neg_ptr && neg_ptr->phi->is_monitorable());
+             (neg_ptr && neg_ptr->phi->is_safe_formula());
     } else if constexpr (any_type_equal_v<T, exists_t, prev_t, next_t>) {
-      return arg.phi->is_monitorable();
+      return arg.phi->is_safe_formula();
     } else if constexpr (any_type_equal_v<T, since_t, until_t>) {
       if (!arg.inter.is_bounded())
         return false;
       const auto &phil = arg.phil, &phir = arg.phir;
-      if (is_subset(phil->fvs(), phir->fvs()) && phil->is_monitorable())
+      if (is_subset(phil->fvs(), phir->fvs()) && phil->is_safe_formula())
         return true;
-      if (!arg.phir->is_monitorable())
+      if (!arg.phir->is_safe_formula())
         return false;
       const auto *neg_ptr = var2::get_if<neg_t>(&phil->val);
-      return (neg_ptr && neg_ptr->phi->is_monitorable());
+      return (neg_ptr && neg_ptr->phi->is_safe_formula());
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
@@ -473,6 +488,7 @@ bool Formula::is_safe_formula() const {
   return var2::visit(visitor, val);
 }
 
+/*
 bool Formula::is_future_bounded() const {
   auto visitor = [](auto &&arg) -> bool {
     using T = std::decay_t<decltype(arg)>;
@@ -490,9 +506,9 @@ bool Formula::is_future_bounded() const {
     }
   };
   return var2::visit(visitor, val);
-}
+}*/
 
-bool Formula::is_monitorable() const {
+/*bool Formula::is_monitorable() const {
   return is_safe_formula() && is_future_bounded();
-}
+}*/
 }// namespace fo::detail

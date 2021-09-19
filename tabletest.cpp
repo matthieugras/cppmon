@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <table.h>
 
-TEST(TableCorrectness, EqualityCorrectness) {
+TEST(Table, Equality) {
   {
     table<int> t1({1, 2, 3}, {{5, 6, 7}, {8, 9, 10}}),
       t2({1, 2, 4}, {{5, 6, 7}, {8, 9, 10}});
@@ -28,7 +28,7 @@ TEST(TableCorrectness, EqualityCorrectness) {
   }
 }
 
-TEST(TableCorrectness, InequalityCorrectness) {
+TEST(Table, Inequality) {
   {
     table<int> t1({1, 2, 3}, {{5, 6, 7}, {8, 9, 10}}),
       t2({3, 2, 1}, {{7, 6, 5}, {9, 9, 8}});
@@ -45,7 +45,7 @@ TEST(TableCorrectness, InequalityCorrectness) {
   }
 }
 
-TEST(TableCorrectness, JoinCorrectness) {
+TEST(Table, Join) {
   {
     table<int> t1({1, 2, 3}, {{5, 6, 7}, {8, 9, 10}}),
       t2({4, 5, 6}, {{10, 20, 30}, {4, 2, 1}}),
@@ -95,7 +95,7 @@ TEST(TableCorrectness, JoinCorrectness) {
   }
 }
 
-TEST(TableCorrectness, UnionCorrectness) {
+TEST(Table, Union) {
   {
     table<int> tab1({}, {}), tab2({}, {}), tab3({}, {});
     EXPECT_EQ(tab1.t_union(tab2), tab3);

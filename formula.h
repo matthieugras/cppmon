@@ -164,9 +164,9 @@ namespace detail {
     [[nodiscard]] size_t degree() const;
     [[nodiscard]] bool is_constraint() const;
     [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
-    [[nodiscard]] bool is_future_bounded() const;
+    //[[nodiscard]] bool is_future_bounded() const;
     [[nodiscard]] bool is_safe_formula() const;
-    [[nodiscard]] bool is_monitorable() const;
+    //[[nodiscard]] bool is_monitorable() const;
 
   private:
     struct pred_t {
