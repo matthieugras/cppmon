@@ -3,8 +3,15 @@
 
 #include <algorithm>
 #include <boost/hana.hpp>
+#include <stdexcept>
 
 namespace detail {
+
+class not_implemented_error : public std::domain_error {
+public:
+  not_implemented_error() : std::domain_error("not implemented.") {}
+};
+
 namespace hana = boost::hana;
 template<typename>
 inline constexpr bool always_false_v = false;
@@ -35,5 +42,6 @@ using detail::always_false_v;
 using detail::any_type_equal_v;
 using detail::is_subset;
 using detail::overloaded;
+using detail::not_implemented_error;
 
 #endif

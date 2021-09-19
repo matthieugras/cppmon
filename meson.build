@@ -43,7 +43,7 @@ formula_src = files('formula.cpp')
 formula_deps = [absl_dep, boost, json]
 
 # MFormula definition
-mformula_src = [formula_src]
+mformula_src = [formula_src, table_src]
 mformula_deps = [absl_dep,table_deps,boost,formula_deps]
 
 # Tests

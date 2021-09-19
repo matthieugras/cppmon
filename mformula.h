@@ -21,7 +21,7 @@ namespace detail {
   using std::vector;
   using var2::variant;
 
-  using fo::event_data;
+  using fo::event_t;
   using fo::Formula;
   using fo::fv_set;
   using fo::Interval;
@@ -29,7 +29,7 @@ namespace detail {
   using fo::Term;
   using fo::detail::ptr_type;
 
-  using table_type = table<event_data>;
+  using table_type = table<event_t>;
 
   // TODO: implement this later together with meval
   struct MBuf2 {};
@@ -100,11 +100,11 @@ namespace detail {
 
   class MState {
   public:
-    explicit MState(const Formula &formula) { state = fo_2_state(formula, 0); }
+    explicit MState(const Formula &formula) : state(fo_2_state(formula, 0)){};
 
   private:
-    using val_type = variant<var2::monostate, MRel, MPred, MOr, MExists, MPrev,
-                             MNext, MNeg, MAndRel, MAndAssign, MAnd>;
+    using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
+                             MAndRel, MAndAssign, MAnd>;
 
     explicit MState(val_type &&state) : state(std::move(state)){};
 
@@ -112,8 +112,10 @@ namespace detail {
       return std::make_unique<MState>(std::forward<decltype(arg)>(arg));
     };
 
-    static val_type convert_eq_to_state(const fo::Eq &arg) {
-      const auto &t1 = arg.l, &t2 = arg.r;
+    static val_type convert_eq_to_state(const fo::Formula::eq_t &arg) {
+      // TODO: fix this properly
+      throw not_implemented_error();
+      /*const auto &t1 = arg.l, &t2 = arg.r;
       if (t1.is_const() && t2.is_const()) {
         if (t1.get_const() == t2.get_const())
           return MRel{table_type::unit_table()};
@@ -124,10 +126,10 @@ namespace detail {
       else if (t1.is_const() && t2.is_var())
         return MRel{table_type::singleton_table(t2.get_var(), t1.get_const())};
       else
-        throw std::runtime_error("safe assignment violated");
+        throw std::runtime_error("safe assignment violated");*/
     }
 
-    static val_type convert_and_to_state(const fo::And &arg,
+    static val_type convert_and_to_state(const fo::Formula::and_t &arg,
                                          size_t n_bound_vars) {
       const auto &phil = arg.phil, &phir = arg.phir;
       if (phir->is_safe_assignment(phil->fvs())) {
@@ -139,7 +141,8 @@ namespace detail {
                     uniq(std::move(r_state))};
       } else if (phir->is_constraint()) {
         return MAndRel{};
-      } else if (const auto *phir_neg = var2::get_if<fo::Neg>(&phir->val)) {
+      } else if (const auto *phir_neg =
+                   var2::get_if<fo::Formula::neg_t>(&phir->val)) {
         auto l_state = MState(fo_2_state(*phil, n_bound_vars)),
              r_state = MState(fo_2_state(*phir_neg->phi, n_bound_vars));
         return MAnd{false, MBuf2{}, uniq(std::move(l_state)),
@@ -154,32 +157,32 @@ namespace detail {
         using T = std::decay_t<decltype(arg)>;
         using std::is_same_v;
 
-        if constexpr (is_same_v<T, fo::Neg>) {
+        if constexpr (is_same_v<T, fo::Formula::neg_t>) {
           if (arg.phi->fvs().empty())
             return MNeg{uniq(MState{fo_2_state(*arg.phi, n_bound_vars)})};
           else
             return MRel{table_type::empty_table()};
-        } else if constexpr (is_same_v<T, fo::Eq>) {
+        } else if constexpr (is_same_v<T, fo::Formula::eq_t>) {
           return convert_eq_to_state(arg);
-        } else if constexpr (is_same_v<T, fo::Pred>) {
+        } else if constexpr (is_same_v<T, fo::Formula::pred_t>) {
           return MPred{arg.pred_name, arg.pred_args};
-        } else if constexpr (is_same_v<T, fo::Or>) {
+        } else if constexpr (is_same_v<T, fo::Formula::or_t>) {
           return MOr{uniq(MState(*arg.phil)), uniq(MState(*arg.phir)), MBuf2()};
-        } else if constexpr (is_same_v<T, fo::And>) {
+        } else if constexpr (is_same_v<T, fo::Formula::and_t>) {
           return convert_and_to_state(arg, n_bound_vars);
-        } else if constexpr (is_same_v<T, fo::Exists>) {
+        } else if constexpr (is_same_v<T, fo::Formula::exists_t>) {
           auto new_state = uniq(MState(fo_2_state(*arg.phi, n_bound_vars + 1)));
           return MExists{n_bound_vars, std::move(new_state)};
-        } else if constexpr (is_same_v<T, fo::Prev>) {
+        } else if constexpr (is_same_v<T, fo::Formula::prev_t>) {
           auto new_state = uniq(MState(fo_2_state(*arg.phi, n_bound_vars)));
           return MPrev{arg.inter, true, {}, {}, std::move(new_state)};
-        } else if constexpr (is_same_v<T, fo::Next>) {
+        } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
           auto new_state = uniq(MState{fo_2_state(*arg.phi, n_bound_vars)});
           return MNext{arg.inter, true, {}, std::move(new_state)};
-        } else if constexpr (is_same_v<T, fo::Since>) {
-          return MPred{};
-        } else if constexpr (is_same_v<T, fo::Until>) {
-          return MPred{};
+        } else if constexpr (is_same_v<T, fo::Formula::since_t>) {
+          throw not_implemented_error();
+        } else if constexpr (is_same_v<T, fo::Formula::until_t>) {
+          throw not_implemented_error();
         } else {
           throw std::runtime_error("not safe");
         }

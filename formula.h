@@ -1,19 +1,21 @@
 #ifndef FORMULA_H
 #define FORMULA_H
 
-#define JSON_USE_IMPLICIT_CONVERSIONS 0
 #include <absl/container/flat_hash_set.h>
+#include <absl/hash/hash.h>
+#include <boost/operators.hpp>
 #include <boost/variant2/variant.hpp>
 #include <cstddef>
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
-#include <optional>
-#include <boost/operators.hpp>
 
 namespace mfo::detail {
 class MState;
@@ -24,12 +26,12 @@ namespace detail {
   // Terms and formulas
   namespace var2 = boost::variant2;
 
-  using nlohmann::json;
   using boost::equality_comparable;
+  using nlohmann::json;
+  using std::optional;
   using std::string;
   using std::string_view;
   using std::vector;
-  using std::optional;
   using var2::holds_alternative;
   using var2::variant;
   using std::literals::string_view_literals::operator""sv;
@@ -40,11 +42,24 @@ namespace detail {
   size_t nat_from_json(const json &json_formula);
   optional<size_t> enat_from_json(const json &json_formula);
 
-  class event_t: equality_comparable<event_t> {
+  class event_t : equality_comparable<event_t> {
     friend struct Term;
 
   public:
     bool operator==(const event_t &other) const;
+    friend fmt::formatter<event_t>;
+
+    template<typename H>
+    friend H AbslHashValue(H h, const event_t &d) {
+      if (const int *iptr = var2::get_if<int>(&d.val)) {
+        return H::combine(std::move(h), *iptr);
+      } else if (const double *dptr = var2::get_if<double>(&d.val)) {
+        return H::combine(std::move(h), *dptr);
+      } else {
+        const string *sptr = var2::get_if<string>(&d.val);
+        return H::combine(std::move(h), *sptr);
+      }
+    }
     static event_t Int(int i);
     static event_t Float(double d);
     static event_t String(string s);
@@ -61,7 +76,7 @@ namespace detail {
 
   struct Formula;
 
-  struct Term: equality_comparable<Term> {
+  struct Term : equality_comparable<Term> {
     friend Formula;
 
   public:
@@ -111,8 +126,8 @@ namespace detail {
     struct i2f_t {
       ptr_type<Term> t;
     };
-    using val_type = variant<event_t, var_t, plus_t, minus_t, uminus_t, mult_t, div_t,
-                             mod_t, f2i_t, i2f_t>;
+    using val_type = variant<event_t, var_t, plus_t, minus_t, uminus_t, mult_t,
+                             div_t, mod_t, f2i_t, i2f_t>;
     explicit Term(val_type &&val) noexcept;
     explicit Term(const val_type &val);
     template<typename F>
@@ -125,7 +140,7 @@ namespace detail {
     val_type val;
   };
 
-  class Interval: equality_comparable<Interval> {
+  class Interval : equality_comparable<Interval> {
     friend Formula;
 
   public:
@@ -140,7 +155,7 @@ namespace detail {
     bool bounded;
   };
 
-  struct Formula: equality_comparable<Formula> {
+  struct Formula : equality_comparable<Formula> {
     friend class ::mfo::detail::MState;
 
   public:
@@ -244,4 +259,30 @@ using detail::name;
 using detail::Term;
 
 }// namespace fo
+
+template<>
+struct [[maybe_unused]] fmt::formatter<fo::event_t> {
+  constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
+  -> decltype(auto) {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it != '}')
+      throw format_error(
+        "invalid format - only empty format strings are accepted");
+    return it;
+  }
+
+  template<typename FormatContext>
+  auto format [[maybe_unused]] (const fo::event_t &tab, FormatContext &ctx)
+  -> decltype(auto) {
+    using boost::variant2::get_if;
+    if (const int *iptr = get_if<int>(&tab.val)) {
+      return format_to(ctx.out(), "Int({})", *iptr);
+    } else if (const double *dptr = get_if<double>(&tab.val)) {
+      return format_to(ctx.out(), "Float({})", *dptr);
+    } else {
+      const std::string *sptr = get_if<std::string>(&tab.val);
+      return format_to(ctx.out(), "Str({})", *sptr);
+    }
+  }
+};
 #endif

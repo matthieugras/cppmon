@@ -1,6 +1,5 @@
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
-#include <fmt/core.h>
 #include <formula.h>
 #include <stdexcept>
 #include <type_traits>
