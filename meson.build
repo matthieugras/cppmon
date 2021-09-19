@@ -9,6 +9,7 @@ if get_option('withsan')
 endif
 
 #jemalloc = dependency('jemalloc')
+json = dependency('nlohmann_json')
 ranges = dependency('range-v3')
 fmt = dependency('fmt')
 boost = dependency('boost')
@@ -39,7 +40,7 @@ table_bench = executable('table_bench', table_bench_src,
 
 # Formula definition
 formula_src = files('formula.cpp')
-formula_deps = [absl_dep, boost]
+formula_deps = [absl_dep, boost, json]
 
 # MFormula definition
 mformula_src = [formula_src]
