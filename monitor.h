@@ -3,8 +3,11 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
+#include <algorithm>
+#include <boost/container/devector.hpp>
 #include <boost/variant2/variant.hpp>
 #include <formula.h>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -12,8 +15,6 @@
 #include <type_traits>
 #include <util.h>
 #include <variant>
-#include <iterator>
-#include <algorithm>
 #include <vector>
 
 namespace monitor {
@@ -21,6 +22,7 @@ namespace detail {
   namespace var2 = boost::variant2;
   using absl::flat_hash_map;
   using absl::flat_hash_set;
+  using boost::container::devector;
   using std::optional;
   using std::pair;
   using std::string_view;
@@ -45,7 +47,41 @@ namespace detail {
   using database = flat_hash_map<name, db_data>;
 
   // TODO: implement this later together with meval
-  struct MBuf2 {};
+  class BinaryBuffer {
+  public:
+    BinaryBuffer() : buf(), is_l(false){};
+
+    /* F should accept two refs to tables and return a new table
+     * new_l and new_r will hold garbage after the call
+     */
+    template<typename F>
+    vector<table_type> update_and_reduce(vector<table_type> &new_l,
+                                         vector<table_type> &new_r, F f) {
+      vector<table_type> res;
+      if (buf.empty()) {
+        res.reserve(std::min(new_l.size(), new_r.size()));
+        auto it1 = new_l.begin(), it2 = new_r.begin(), eit1 = new_l.end(),
+             eit2 = new_r.end();
+        for (; it1 != eit1 && it2 != eit2; it1++, it2++) {
+          res.push_back(F(*it1, *it2));
+        }
+        if (it1 == eit1) {
+          swap(it1, it2);
+          swap(eit1, eit2);
+        }
+        buf.insert(buf.begin(), std::make_move_iterator(it1),
+                   std::make_move_iterator(eit1));
+      } else {
+
+      }
+      return res;
+    }
+
+  private:
+    devector<table_type> buf;
+    bool is_l;
+    bool is_init;
+  };
 
   // TODO: implement this later together with meval
   struct MSaux {};
@@ -65,12 +101,13 @@ namespace detail {
     vector<Term> pred_args;
     size_t n_fvs;
     vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
-    optional<vector<event_data>> match(const vector<event_data> &event_args) const;
+    optional<vector<event_data>>
+    match(const vector<event_data> &event_args) const;
   };
 
   struct MAnd {
     bool is_positive;
-    MBuf2 buf;
+    BinaryBuffer buf;
     ptr_type<MState> l_state, r_state;
   };
 
@@ -83,7 +120,7 @@ namespace detail {
 
   struct MOr {
     ptr_type<MState> l_state, r_state;
-    MBuf2 buf;
+    BinaryBuffer buf;
   };
 
   struct MNeg {
@@ -92,8 +129,9 @@ namespace detail {
   };
 
   struct MExists {
-    size_t bound_var;
+    size_t idx_of_bound_var;
     ptr_type<MState> state;
+    vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
   };
 
   struct MPrev {
@@ -119,6 +157,7 @@ namespace detail {
   class MState {
     friend class Monitor;
     friend struct MNeg;
+    friend struct MExists;
 
   private:
     vector<table_type> eval(const database &db, size_t n_tps, size_t ts);

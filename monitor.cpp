@@ -32,7 +32,7 @@ MState::MState(val_type &&state) : state(std::move(state)) {}
 vector<table_type> MState::eval(const database &db, size_t n_tps, size_t ts) {
   auto visitor = [&db, n_tps, ts](auto &&arg) -> vector<table_type> {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, MPred>) {
+    if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel>) {
       return arg.eval(db, n_tps, ts);
     } else {
       throw not_implemented_error();
@@ -54,7 +54,7 @@ MState::make_eq_state(const fo::Formula::eq_t &arg) {
   assert(l.is_var() && rcst || lcst && r.is_var());
   if (l.is_var())
     std::swap(lcst, rcst);
-  return {MRel{table_type::singleton_table(0, *lcst)}, {0}};
+  return {MRel{table_type::singleton_table(*lcst)}, {0}};
 }
 
 pair<MState::val_type, table_layout>
@@ -117,10 +117,18 @@ MState::make_formula_state(const Formula &formula, size_t n_bound_vars) {
       throw not_implemented_error();
       // return make_and_state(arg, n_bound_vars);
     } else if constexpr (is_same_v<T, fo::Formula::exists_t>) {
-      throw not_implemented_error();
-      /*auto new_state =
-        uniq(MState(make_formula_state(*arg.phi, n_bound_vars + 1)));
-      return MExists{n_bound_vars, std::move(new_state)};*/
+      auto [rec_state, rec_layout] =
+        make_formula_state(*arg.phi, n_bound_vars + 1);
+      table_layout this_layout;
+      this_layout.reserve(rec_layout.size());
+      size_t drop_idx =
+        std::distance(rec_layout.cbegin(),
+                      std::find(rec_layout.cbegin(), rec_layout.cend(), 0));
+      for (size_t i = 0; i < rec_layout.size(); ++i) {
+        if (i != drop_idx)
+          this_layout.push_back(rec_layout[i] - 1);
+      }
+      return {MExists{drop_idx, uniq(MState(std::move(rec_state)))}, this_layout};
     } else if constexpr (is_same_v<T, fo::Formula::prev_t>) {
       throw not_implemented_error();
       /*auto new_state = uniq(MState(make_formula_state(*arg.phi,
@@ -169,9 +177,8 @@ vector<table_type> MPred::eval(const database &db, size_t n_tps, size_t) const {
     table_type tab;
     for (const auto &ev : ev_set) {
       auto new_row = match(ev);
-      if (new_row) {
+      if (new_row)
         tab.add_row(std::move(*new_row));
-      }
     }
     res.push_back(std::move(tab));
   }
@@ -179,10 +186,11 @@ vector<table_type> MPred::eval(const database &db, size_t n_tps, size_t) const {
 }
 
 vector<table_type> MRel::eval(const database &, size_t, size_t) const {
-  return {std::move(tab)};
+  return {tab};
 }
 
-vector<table_type> MNeg::eval(const database &db, size_t n_tps, size_t ts) const {
+vector<table_type> MNeg::eval(const database &db, size_t n_tps,
+                              size_t ts) const {
   auto rec_tabs = state->eval(db, n_tps, ts);
   vector<table_type> res;
   res.reserve(rec_tabs.size());
@@ -196,4 +204,28 @@ vector<table_type> MNeg::eval(const database &db, size_t n_tps, size_t ts) const
   return res;
 }
 
+vector<table_type> MExists::eval(const database &db, size_t n_tps, size_t ts) const {
+  auto rec_tabs = state->eval(db, n_tps, ts);
+  std::for_each(rec_tabs.begin(), rec_tabs.end(), [this](auto &tab) {
+    tab.drop_col(idx_of_bound_var);
+  });
+  return rec_tabs;
+}
+
 }// namespace monitor::detail
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

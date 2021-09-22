@@ -31,7 +31,7 @@ main_includes = include_directories('.')
 
 # Table
 table_src = files('table.cpp')
-table_deps = [fmt,absl_dep]
+table_deps = [fmt,absl_dep,boost]
 
 sources = [files('cppmon.cpp'), table_src]
 exe = executable('cppmon', sources,
