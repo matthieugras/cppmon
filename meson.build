@@ -8,7 +8,12 @@ if get_option('withsan')
   add_global_link_arguments(['-lasan', '-lubsan', '--rtlib=compiler-rt'], language: 'cpp')
 endif
 
-#jemalloc = dependency('jemalloc')
+if get_option('withjemalloc')
+    jemalloc = dependency('jemalloc')
+else
+    jemalloc = []
+endif
+
 json = dependency('nlohmann_json')
 ranges = dependency('range-v3')
 fmt = dependency('fmt')
@@ -36,19 +41,19 @@ exe = executable('cppmon', sources,
 # Table benchmark
 table_bench_src = [table_src, files('tablebench.cpp')]
 table_bench = executable('table_bench', table_bench_src,
-    dependencies: [table_deps, benchmark])
+    dependencies: [table_deps, benchmark, jemalloc])
 
 # Formula definition
 formula_src = files('formula.cpp')
 formula_deps = [absl_dep, boost, json]
 
-# MFormula definition
-mformula_src = [formula_src, table_src]
-mformula_deps = [absl_dep,table_deps,boost,formula_deps]
+# Monitor definition
+monitor_src = [files('monitor.cpp'), formula_src, table_src]
+monitor_deps = [absl_dep,table_deps,boost,formula_deps]
 
 # Tests
-test_src = [files('test_main.cpp', 'tabletest.cpp', 'formulatest.cpp', 'mformulatest.cpp'),
-    mformula_src, formula_src]
-test_deps = [gtest, fmt, mformula_deps, formula_deps, table_deps]
+test_src = [files('test_main.cpp', 'tabletest.cpp', 'formulatest.cpp', 'monitortest.cpp'),
+    monitor_src, formula_src]
+test_deps = [gtest, fmt, monitor_deps, formula_deps, table_deps]
 test_exe = executable('test_exe', test_src,
     dependencies: test_deps, include_directories: [main_includes])

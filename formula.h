@@ -11,14 +11,16 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
 
-namespace mfo::detail {
+namespace monitor::detail {
 class MState;
+struct MPred;
 }
 
 namespace fo {
@@ -42,15 +44,15 @@ namespace detail {
   size_t nat_from_json(const json &json_formula);
   optional<size_t> enat_from_json(const json &json_formula);
 
-  class event_t : equality_comparable<event_t> {
+  class event_data : equality_comparable<event_data> {
     friend struct Term;
 
   public:
-    bool operator==(const event_t &other) const;
-    friend fmt::formatter<event_t>;
+    bool operator==(const event_data &other) const;
+    friend fmt::formatter<event_data>;
 
     template<typename H>
-    friend H AbslHashValue(H h, const event_t &d) {
+    friend H AbslHashValue(H h, const event_data &d) {
       if (const int *iptr = var2::get_if<int>(&d.val)) {
         return H::combine(std::move(h), *iptr);
       } else if (const double *dptr = var2::get_if<double>(&d.val)) {
@@ -60,14 +62,14 @@ namespace detail {
         return H::combine(std::move(h), *sptr);
       }
     }
-    static event_t Int(int i);
-    static event_t Float(double d);
-    static event_t String(string s);
-    static event_t from_json(const json &json_formula);
+    static event_data Int(int i);
+    static event_data Float(double d);
+    static event_data String(string s);
+    static event_data from_json(const json &json_formula);
 
   private:
     using val_type = variant<int, double, string>;
-    explicit event_t(val_type &&val) noexcept;
+    explicit event_data(val_type &&val) noexcept;
     val_type val;
   };
 
@@ -78,13 +80,15 @@ namespace detail {
 
   struct Term : equality_comparable<Term> {
     friend Formula;
+    friend ::monitor::detail::MPred;
+    friend class monitor::detail::MState;
 
   public:
     Term(const Term &t);
     Term(Term &&t) noexcept;
     bool operator==(const Term &other) const;
     static Term Var(size_t idx);
-    static Term Const(event_t c);
+    static Term Const(event_data c);
     static Term Plus(Term l, Term r);
     static Term Minus(Term l, Term r);
     static Term UMinus(Term t);
@@ -95,7 +99,8 @@ namespace detail {
     static Term I2f(Term t);
     [[nodiscard]] bool is_const() const;
     [[nodiscard]] bool is_var() const;
-    [[nodiscard]] size_t get_var() const;
+    [[nodiscard]] const size_t* get_if_var() const;
+    [[nodiscard]] const event_data* get_if_const() const;
     [[nodiscard]] fv_set fvs() const;
 
   private:
@@ -126,8 +131,8 @@ namespace detail {
     struct i2f_t {
       ptr_type<Term> t;
     };
-    using val_type = variant<event_t, var_t, plus_t, minus_t, uminus_t, mult_t,
-                             div_t, mod_t, f2i_t, i2f_t>;
+    using val_type = variant<event_data, var_t, plus_t, minus_t, uminus_t,
+                             mult_t, div_t, mod_t, f2i_t, i2f_t>;
     explicit Term(val_type &&val) noexcept;
     explicit Term(const val_type &val);
     template<typename F>
@@ -156,7 +161,7 @@ namespace detail {
   };
 
   struct Formula : equality_comparable<Formula> {
-    friend class ::mfo::detail::MState;
+    friend class ::monitor::detail::MState;
 
   public:
     Formula(const Formula &formula);
@@ -251,7 +256,7 @@ namespace detail {
   };
 }// namespace detail
 
-using detail::event_t;
+using detail::event_data;
 using detail::Formula;
 using detail::fv_set;
 using detail::Interval;
@@ -261,7 +266,7 @@ using detail::Term;
 }// namespace fo
 
 template<>
-struct [[maybe_unused]] fmt::formatter<fo::event_t> {
+struct [[maybe_unused]] fmt::formatter<fo::event_data> {
   constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
   -> decltype(auto) {
     auto it = ctx.begin();
@@ -272,7 +277,7 @@ struct [[maybe_unused]] fmt::formatter<fo::event_t> {
   }
 
   template<typename FormatContext>
-  auto format [[maybe_unused]] (const fo::event_t &tab, FormatContext &ctx)
+  auto format [[maybe_unused]] (const fo::event_data &tab, FormatContext &ctx)
   -> decltype(auto) {
     using boost::variant2::get_if;
     if (const int *iptr = get_if<int>(&tab.val)) {

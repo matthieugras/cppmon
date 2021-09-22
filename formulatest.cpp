@@ -62,7 +62,7 @@ TEST(Formula, FormulaFromJson) {
       Formula::Pred("publish", {Term::Var(0), Term::Var(1)}),
       Formula::Neg(Formula::Since(
         Interval(0, 604800),
-        Formula::Eq(Term::Const(event_t::Int(0)), Term::Const(event_t::Int(0))),
+        Formula::Eq(Term::Const(event_data::Int(0)), Term::Const(event_data::Int(0))),
         Formula::Exists(Formula::And(
           Formula::Since(
             Interval(0, 0, false),
@@ -77,7 +77,7 @@ TEST(Formula, FormulaFromJson) {
       Formula::Pred("publish", {Term::Var(1), Term::Var(1)}),
       Formula::Neg(Formula::Since(
         Interval(0, 604800),
-        Formula::Eq(Term::Const(event_t::Int(0)), Term::Const(event_t::Int(0))),
+        Formula::Eq(Term::Const(event_data::Int(0)), Term::Const(event_data::Int(0))),
         Formula::Exists(Formula::And(
           Formula::Since(
             Interval(0, 0, false),
@@ -91,7 +91,7 @@ TEST(Formula, FormulaFromJson) {
       Formula::Pred("publish", {Term::Var(0), Term::Var(1)}),
       Formula::Neg(Formula::Since(
         Interval(0, 6048005),
-        Formula::Eq(Term::Const(event_t::Int(0)), Term::Const(event_t::Int(0))),
+        Formula::Eq(Term::Const(event_data::Int(0)), Term::Const(event_data::Int(0))),
         Formula::Exists(Formula::And(
           Formula::Since(
             Interval(0, 0, false),
@@ -105,8 +105,8 @@ TEST(Formula, FormulaFromJson) {
       Formula::Pred("publish", {Term::Var(0), Term::Var(1)}),
       Formula::Neg(Formula::Since(
         Interval(0, 604800),
-        Formula::Eq(Term::Const(event_t::Int(0)),
-                    Term::Const(event_t::Float(2.5))),
+        Formula::Eq(Term::Const(event_data::Int(0)),
+                    Term::Const(event_data::Float(2.5))),
         Formula::Exists(Formula::And(
           Formula::Since(
             Interval(0, 0, false),
@@ -120,7 +120,7 @@ TEST(Formula, FormulaFromJson) {
       Formula::Pred("publish", {Term::Var(0), Term::Var(1)}),
       Formula::Neg(Formula::Since(
         Interval(0, 604800),
-        Formula::Eq(Term::Const(event_t::Int(0)), Term::Const(event_t::Int(0))),
+        Formula::Eq(Term::Const(event_data::Int(0)), Term::Const(event_data::Int(0))),
         Formula::Exists(Formula::And(
           Formula::Since(
             Interval(0, 0, false),
@@ -143,19 +143,19 @@ TEST(Formula, FormulaFromJson) {
           Formula::Pred("trans", {Term::Var(1), Term::Var(2), Term::Var(3)}),
           Formula::Since(
             Interval(0, 30),
-            Formula::Eq(Term::Const(event_t::Int(0)),
-                        Term::Const(event_t::Int(0))),
+            Formula::Eq(Term::Const(event_data::Int(0)),
+                        Term::Const(event_data::Int(0))),
             Formula::And(
               Formula::Exists(Formula::Pred(
                 "trans", {Term::Var(2), Term::Var(1), Term::Var(0)})),
               Formula::Until(Interval(0, 5),
-                             Formula::Eq(Term::Const(event_t::Int(0)),
-                                         Term::Const(event_t::Int(0))),
+                             Formula::Eq(Term::Const(event_data::Int(0)),
+                                         Term::Const(event_data::Int(0))),
                              Formula::Pred("report", {Term::Var(0)}))))),
         Formula::Neg(Formula::Eq(Term::Var(2), Term::Var(0))))),
       Formula::Neg(Formula::Until(
         Interval(0, 2),
-        Formula::Eq(Term::Const(event_t::Int(0)), Term::Const(event_t::Int(0))),
+        Formula::Eq(Term::Const(event_data::Int(0)), Term::Const(event_data::Int(0))),
         Formula::Pred("report", {Term::Var(1)}))));
     EXPECT_TRUE(f.is_safe_formula());
     EXPECT_EQ(f, Formula(exp2_p4));
@@ -233,7 +233,7 @@ TEST(Formula, IsSafeFormula) {
     EXPECT_FALSE(f.is_safe_formula());
   }
   {
-    auto f = Formula::Eq(Term::Const(event_t::Int(1)), Term::Var(0));
+    auto f = Formula::Eq(Term::Const(event_data::Int(1)), Term::Var(0));
     EXPECT_TRUE(f.is_safe_formula());
   }
   {
@@ -241,7 +241,7 @@ TEST(Formula, IsSafeFormula) {
     EXPECT_FALSE(f.is_safe_formula());
   }
   {
-    auto f = Formula::Neg(Formula::Pred("A", {Term::Const(event_t::Int(1))}));
+    auto f = Formula::Neg(Formula::Pred("A", {Term::Const(event_data::Int(1))}));
     EXPECT_TRUE(f.is_safe_formula());
   }
   {

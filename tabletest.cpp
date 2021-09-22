@@ -88,7 +88,6 @@ TEST(Table, Join) {
     EXPECT_EQ(t1.natural_join(t2), t1);
   }
   {
-    int bla = INT_MAX;
     table<int> t1({3, 1, 2}, {{5, 6, 7}, {8, 9, 10}, {11, 12, 13}}), t2({}, {}),
       t3({1, 2, 3}, {});
     EXPECT_EQ(t1.natural_join(t2), t3);

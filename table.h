@@ -16,25 +16,29 @@
 #include <utility>
 #include <vector>
 
-namespace tbl_impl {
+namespace detail {
 template<typename T>
 class table;
 }
 template<typename T>
-struct [[maybe_unused]] fmt::formatter<tbl_impl::table<T>>;
-using tbl_impl::table;
+struct [[maybe_unused]] fmt::formatter<detail::table<T>>;
 
-namespace tbl_impl {
+namespace detail {
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using std::size_t;
 using std::vector;
+
+using table_layout = vector<size_t>;
+
+table_layout get_join_layout(const table_layout &l1, const table_layout &l2);
 
 template<typename T>
 class table {
   friend struct fmt::formatter<table<T>>;
 
 public:
+  table() = default;
   explicit table(vector<size_t> idx_to_var) {
     size_t n = idx_to_var.size();
     m_n_cols = n;
@@ -56,14 +60,16 @@ public:
     m_tab_impl.template insert(std::make_move_iterator(data.begin()),
                                std::make_move_iterator(data.end()));
   }
-  // TODO: there can be more than one empty table - check this
   [[nodiscard]] static table<T> empty_table() { return table({}, {}); };
   [[nodiscard]] static table<T> unit_table() {
-    // TODO: verify that this is correct
+    // TODO: change API
     return table({}, {{}});
   }
   [[nodiscard]] static table<T> singleton_table(size_t var_name, T value) {
     return table({var_name}, {{value}});
+  }
+  [[nodiscard]] bool is_empty() const {
+    return m_tab_impl.empty();
   }
   [[nodiscard]] const vector<size_t> &var_names() const {
     return this->idx_to_var;
@@ -86,10 +92,11 @@ public:
   }
   bool operator!=(const table<T> &other) const { return !(*this == other); }
   size_t tab_size() { return this->m_tab_impl.size(); }
-  void add_row(const vector<T> &row) {
+  void add_row(vector<T> row) {
     assert(row.size() == this->m_n_cols);
-    this->m_tab_impl.insert(row);
+    m_tab_impl.insert(std::move(row));
   }
+
   table<T> natural_join(const table<T> &tab) const {
     vector<ptrdiff_t> idx_to_var2_filtered;
     vector<size_t> comm_idx1, comm_idx2;
@@ -153,7 +160,7 @@ public:
   void t_union_in_place(const table<T> &tab) { t_union_impl(*this, tab); }
 
 private:
-  table() = default;
+  //table() = default;
 
   using TblImplType = flat_hash_set<vector<T>>;
   using TblImplPtr = typename TblImplType::const_pointer;
@@ -252,6 +259,10 @@ private:
   }
 };
 }// namespace tbl_impl
+
+using detail::table;
+using detail::table_layout;
+using detail::get_join_layout;
 
 template<typename T>
 struct [[maybe_unused]] fmt::formatter<table<T>> {

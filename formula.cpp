@@ -29,26 +29,26 @@ optional<size_t> enat_from_json(const json &json_formula) {
 }
 
 // event_t member functions
-event_t::event_t(val_type &&val) noexcept : val(std::move(val)) {}
+event_data::event_data(val_type &&val) noexcept : val(std::move(val)) {}
 
-bool event_t::operator==(const event_t &other) const {
+bool event_data::operator==(const event_data &other) const {
   return val == other.val;
 }
 
-event_t event_t::Int(int i) { return event_t(i); }
+event_data event_data::Int(int i) { return event_data(i); }
 
-event_t event_t::String(string s) { return event_t(std::move(s)); }
+event_data event_data::String(string s) { return event_data(std::move(s)); }
 
-event_t event_t::Float(double d) { return event_t(d); }
+event_data event_data::Float(double d) { return event_data(d); }
 
-event_t event_t::from_json(const json &json_formula) {
+event_data event_data::from_json(const json &json_formula) {
   string_view event_ty = json_formula.at(0).get<string_view>();
   if (event_ty == "EInt"sv) {
-    return event_t::Int(json_formula.at(1).get<int>());
+    return event_data::Int(json_formula.at(1).get<int>());
   } else if (event_ty == "EFloat"sv) {
-    return event_t::Float(json_formula.at(1).get<double>());
+    return event_data::Float(json_formula.at(1).get<double>());
   } else if (event_ty == "EString"sv) {
-    return event_t::String(json_formula.at(1).get<string>());
+    return event_data::String(json_formula.at(1).get<string>());
   } else {
     throw std::runtime_error("invalid event_data json");
   }
@@ -105,7 +105,7 @@ bool Term::operator==(const Term &other) const {
       return false;
     } else if constexpr (std::is_same_v<T1, var_t>) {
       return arg1.idx == arg2.idx;
-    } else if constexpr (std::is_same_v<T1, event_t>) {
+    } else if constexpr (std::is_same_v<T1, event_data>) {
       return arg1 == arg2;
     } else if constexpr (any_type_equal_v<T1, uminus_t, f2i_t, i2f_t>) {
       return (*arg1.t) == (*arg2.t);
@@ -124,7 +124,7 @@ Term Term::from_json(const json &json_formula) {
   if (term_ty == "Var"sv) {
     return Term::Var(nat_from_json(json_formula.at(1)));
   } else if (term_ty == "Const"sv) {
-    return Term::Const(event_t::from_json(json_formula.at(1)));
+    return Term::Const(event_data::from_json(json_formula.at(1)));
   } else if (term_ty == "Plus"sv) {
     return Term::Plus(Term::from_json(json_formula.at(1)),
                       Term::from_json(json_formula.at(2)));
@@ -152,7 +152,7 @@ Term Term::from_json(const json &json_formula) {
 Term::val_type Term::copy_val(const val_type &val) {
   auto visitor = [](auto &&arg) -> val_type {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (any_type_equal_v<T, event_t, var_t>) {
+    if constexpr (any_type_equal_v<T, event_data, var_t>) {
       return arg;
     } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
       return T{uniq(copy_val(arg.t->val))};
@@ -167,7 +167,7 @@ Term::val_type Term::copy_val(const val_type &val) {
 }
 
 Term Term::Var(size_t idx) { return Term(var_t{idx}); }
-Term Term::Const(event_t c) { return Term(std::move(c)); }
+Term Term::Const(event_data c) { return Term(std::move(c)); }
 Term Term::Plus(Term l, Term r) {
   return Term(plus_t{uniq(std::move(l)), uniq(std::move(r))});
 }
@@ -187,9 +187,20 @@ Term Term::Mod(Term l, Term r) {
 Term Term::F2i(Term t) { return Term(f2i_t{uniq(std::move(t))}); }
 Term Term::I2f(Term t) { return Term(i2f_t{uniq(std::move(t))}); }
 
-bool Term::is_const() const { return holds_alternative<event_t>(val); }
+bool Term::is_const() const { return holds_alternative<event_data>(val); }
 bool Term::is_var() const { return holds_alternative<var_t>(val); }
-size_t Term::get_var() const { return var2::get<var_t>(val).idx; }
+const size_t* Term::get_if_var() const {
+  if (const auto *ptr = var2::get_if<var_t>(&val)) {
+    return &(ptr->idx);
+  } else {
+    return nullptr;
+  }
+}
+
+const event_data *Term::get_if_const() const {
+  return var2::get_if<event_data>(&val);
+}
+
 fv_set Term::fvi(size_t num_bound_vars) const {
   auto visitor = [num_bound_vars](auto &&arg) -> fv_set {
     using T = std::decay_t<decltype(arg)>;
@@ -207,7 +218,7 @@ fv_set Term::fvi(size_t num_bound_vars) const {
       return fvs1;
     } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
       return arg.t->fvi(num_bound_vars);
-    } else if constexpr (std::is_same_v<T, event_t>) {
+    } else if constexpr (std::is_same_v<T, event_data>) {
       return {};
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
@@ -417,13 +428,14 @@ bool Formula::is_safe_assignment(const fv_set &vars) const {
   using var2::get;
   if (const eq_t *ptr = var2::get_if<eq_t>(&val)) {
     const auto &t1 = ptr->l, &t2 = ptr->r;
-    if (t1.is_var() && t2.is_var()) {
-      size_t var1 = t1.get_var(), var2 = t2.get_var();
-      return vars.contains(var1) != vars.contains(var2);
-    } else if (t1.is_var()) {
-      return (!vars.contains(t1.get_var())) && is_subset(t2.fvs(), vars);
-    } else if (t2.is_var()) {
-      return (!vars.contains(t2.get_var()) && is_subset(t1.fvs(), vars));
+    const size_t *var1 = t1.get_if_var(),
+                 *var2 = t2.get_if_var();
+    if (var1 && var2) {
+      return vars.contains(*var1) != vars.contains(*var2);
+    } else if (var1) {
+      return (!vars.contains(*var1)) && is_subset(t2.fvs(), vars);
+    } else if (var2) {
+      return (!vars.contains(*var2) && is_subset(t1.fvs(), vars));
     }
   }
   return false;
@@ -442,9 +454,10 @@ bool Formula::is_safe_formula() const {
       return false;
     } else if constexpr (is_same_v<T, neg_t>) {
       if (const auto *ptr = var2::get_if<eq_t>(&arg.phi->val)) {
-        const auto &t1 = ptr->l, &t2 = ptr->r;
-        if (t1.is_var() && t2.is_var())
-          return t1.get_var() == t2.get_var();
+        const auto *var1 = ptr->l.get_if_var(),
+                   *var2 = ptr->r.get_if_var();
+        if (var1 && var2)
+          return (*var1) == (*var2);
       }
       return arg.phi->fvs().empty() && arg.phi->is_safe_formula();
     } else if constexpr (is_same_v<T, pred_t>) {
