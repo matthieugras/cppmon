@@ -1,3 +1,3 @@
 #!/bin/bash
 conan install . -if builddir --build=missing
-CXX_LD=lld CC_LD=lld LDFLAGS=-static-libstdc++ PKG_CONFIG_PATH=builddir CXX=clang++ CC=clang meson setup --buildtype=release -Db_lto=true -Dwithjemalloc=true -Db_ndebug=true builddir
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-flto=full -march=native" -DCMAKE_C_FLAGS="-flto=full -march=native" -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" -S . -B builddir

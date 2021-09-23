@@ -10,7 +10,7 @@ jemalloc/5.2.1
 nlohmann_json/3.10.2
 
 [generators]
-pkg_config
+cmake
 
 [options]
 boost:without_locale=True

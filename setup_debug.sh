@@ -1,3 +1,3 @@
 #!/bin/bash
 conan install . -if builddir_debug --build=missing
-PKG_CONFIG_PATH=builddir_debug CXX=clang++ meson setup --buildtype=debug -Dwithsan=true builddir_debug
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined" -DCMAKE_C_FLAGS="-fsanitize=address,undefined" -S . -B builddir_debug
