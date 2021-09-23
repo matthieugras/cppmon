@@ -79,6 +79,7 @@ namespace detail {
       }
       buf.insert(buf.end(), std::make_move_iterator(it1),
                  std::make_move_iterator(eit1));
+      return res;
     }
 
   private:
@@ -105,6 +106,7 @@ namespace detail {
     size_t n_fvs;
     vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
     optional<vector<event_data>>
+    // variables
     match(const vector<event_data> &event_args) const;
   };
 

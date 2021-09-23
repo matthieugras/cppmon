@@ -22,21 +22,16 @@ benchmark = dependency('benchmark')
 gtest = dependency('gtest')
 
 absl_dep = dependency('abseil')
-#flex_bin = find_program('flex', required: true)
-#bison_bin = find_program('bison', required: true)
+flex_bin = find_program('flex', required: true)
+bison_bin = find_program('bison', required: true)
 
-#subdir('parsing')
+subdir('parsing')
 
 main_includes = include_directories('.')
 
 # Table
 table_src = files('table.cpp')
 table_deps = [fmt,absl_dep,boost]
-
-sources = [files('cppmon.cpp'), table_src]
-exe = executable('cppmon', sources,
-    install : true, dependencies : [table_deps],
-    include_directories: [main_includes])
 
 # Table benchmark
 table_bench_src = [table_src, files('tablebench.cpp')]
@@ -50,6 +45,16 @@ formula_deps = [absl_dep, boost, json]
 # Monitor definition
 monitor_src = [files('monitor.cpp'), formula_src, table_src]
 monitor_deps = [absl_dep,table_deps,boost,formula_deps]
+
+# Monitor driver definition
+driver_src = [files('monitor_driver.cpp'), monitor_src]
+driver_deps = [monitor_deps, trace_parser]
+
+# Main executable
+main_sources = [files('cppmon.cpp'), driver_src]
+main_exe = executable('cppmon', main_sources,
+    install : true, dependencies : [fmt, driver_deps],
+    include_directories: [main_includes])
 
 # Tests
 test_src = [files('test_main.cpp', 'tabletest.cpp', 'formulatest.cpp', 'monitortest.cpp'),

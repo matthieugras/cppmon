@@ -22,14 +22,9 @@ lc [a-z]
 uc [A-Z]
 letter {uc}|{lc}
 digit [0-9]
-integer ("-")?{digit}+
-rational ("-")?{digit}+"."{digit}*
-unit {digit}+{letter}
 any_string ({letter}|{digit}|"_"|"-"|"/"|":"|"\'"|"\"")*
 string ({letter}|{digit}|"_"){any_string}
 str_cst ("\'"{any_string}"\'")|("\""{any_string}"\"")|("\'""["{any_string}"]""\'")|("\"""["{any_string}"]""\"")
-line_comment "#"[^{}\n\r]*(\n|\r)
-multi_line_comment "(*"[^{}]*"*)"
 
 %{
   # define YY_USER_ACTION  loc.columns (yyleng);
