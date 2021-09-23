@@ -59,6 +59,7 @@ MState::make_eq_state(const fo::Formula::eq_t &arg) {
 
 pair<MState::val_type, table_layout>
 MState::make_and_state(const fo::Formula::and_t &arg, size_t n_bound_vars) {
+  throw not_implemented_error();
   const auto &phil = arg.phil, &phir = arg.phir;
   if (phir->is_safe_assignment(phil->fvs())) {
     throw not_implemented_error();
@@ -93,7 +94,7 @@ MState::make_formula_state(const Formula &formula, size_t n_bound_vars) {
 
     if constexpr (is_same_v<T, fo::Formula::neg_t>) {
       if (arg.phi->fvs().empty()) {
-        val_type rec_st = make_formula_state(*arg.phi, n_bound_vars).first;
+        auto rec_st = make_formula_state(*arg.phi, n_bound_vars).first;
         return {MNeg{uniq(MState(std::move(rec_st)))}, {}};
       } else {
         return {MRel{table_type::empty_table()}, {}};
@@ -112,7 +113,13 @@ MState::make_formula_state(const Formula &formula, size_t n_bound_vars) {
               tab_layout};
     } else if constexpr (is_same_v<T, fo::Formula::or_t>) {
       throw not_implemented_error();
-      // return MOr{uniq(MState(*arg.phil)), uniq(MState(*arg.phir)), MBuf2()};
+      auto [l_state, l_layout] = make_formula_state(*arg.phil, n_bound_vars);
+      auto [r_state, r_layout] = make_formula_state(*arg.phir, n_bound_vars);
+      auto permutation = find_permutation(l_layout, r_layout);
+      return {MOr{uniq(MState(std::move(l_state))),
+                  uniq(MState(std::move(r_state))), permutation,
+                  BinaryBuffer()},
+              l_layout};
     } else if constexpr (is_same_v<T, fo::Formula::and_t>) {
       throw not_implemented_error();
       // return make_and_state(arg, n_bound_vars);
@@ -128,7 +135,8 @@ MState::make_formula_state(const Formula &formula, size_t n_bound_vars) {
         if (i != drop_idx)
           this_layout.push_back(rec_layout[i] - 1);
       }
-      return {MExists{drop_idx, uniq(MState(std::move(rec_state)))}, this_layout};
+      return {MExists{drop_idx, uniq(MState(std::move(rec_state)))},
+              this_layout};
     } else if constexpr (is_same_v<T, fo::Formula::prev_t>) {
       throw not_implemented_error();
       /*auto new_state = uniq(MState(make_formula_state(*arg.phi,
@@ -204,28 +212,21 @@ vector<table_type> MNeg::eval(const database &db, size_t n_tps,
   return res;
 }
 
-vector<table_type> MExists::eval(const database &db, size_t n_tps, size_t ts) const {
+vector<table_type> MExists::eval(const database &db, size_t n_tps,
+                                 size_t ts) const {
   auto rec_tabs = state->eval(db, n_tps, ts);
-  std::for_each(rec_tabs.begin(), rec_tabs.end(), [this](auto &tab) {
-    tab.drop_col(idx_of_bound_var);
-  });
+  std::for_each(rec_tabs.begin(), rec_tabs.end(),
+                [this](auto &tab) { tab.drop_col(idx_of_bound_var); });
   return rec_tabs;
 }
 
+vector<table_type> MOr::eval(const database &db, size_t n_tps, size_t ts) {
+  auto l_rec_tabs = l_state->eval(db, n_tps, ts),
+       r_rec_tabs = r_state->eval(db, n_tps, ts);
+  auto reduction_fn = [this](const table_type &tab1, const table_type &tab2) {
+    return tab1.t_union(tab2, r_layout_permutation);
+  };
+  return buf.update_and_reduce(l_rec_tabs, r_rec_tabs, reduction_fn);
+}
+
 }// namespace monitor::detail
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

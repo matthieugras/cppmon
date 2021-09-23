@@ -46,41 +46,44 @@ namespace detail {
   using db_data = vector<flat_hash_set<vector<event_data>>>;
   using database = flat_hash_map<name, db_data>;
 
-  // TODO: implement this later together with meval
   class BinaryBuffer {
   public:
     BinaryBuffer() : buf(), is_l(false){};
 
-    /* F should accept two refs to tables and return a new table
-     * new_l and new_r will hold garbage after the call
-     */
     template<typename F>
     vector<table_type> update_and_reduce(vector<table_type> &new_l,
-                                         vector<table_type> &new_r, F f) {
+                                         vector<table_type> &new_r, F &f) {
       vector<table_type> res;
-      if (buf.empty()) {
-        res.reserve(std::min(new_l.size(), new_r.size()));
-        auto it1 = new_l.begin(), it2 = new_r.begin(), eit1 = new_l.end(),
-             eit2 = new_r.end();
-        for (; it1 != eit1 && it2 != eit2; it1++, it2++) {
-          res.push_back(F(*it1, *it2));
-        }
-        if (it1 == eit1) {
-          swap(it1, it2);
-          swap(eit1, eit2);
-        }
-        buf.insert(buf.begin(), std::make_move_iterator(it1),
-                   std::make_move_iterator(eit1));
-      } else {
-
+      auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
+           eit2 = new_r.end();
+      if (!is_l) {
+        std::swap(it1, it2);
+        std::swap(eit1, eit2);
       }
-      return res;
+      for (; !buf.empty() && it2 != eit2; buf.pop_front(), ++it2) {
+        if (is_l)
+          res.push_back(f(buf.front(), *it2));
+        else
+          res.push_back(f(*it2, buf.front()));
+      }
+      for (; it1 != eit1 && it2 != eit2; it1++, it2++) {
+        if (is_l)
+          res.push_back(f(*it1, *it2));
+        else
+          res.push_back(f(*it2, *it1));
+      }
+      if (it1 == eit1) {
+        is_l = !is_l;
+        std::swap(it1, it2);
+        std::swap(eit1, eit2);
+      }
+      buf.insert(buf.end(), std::make_move_iterator(it1),
+                 std::make_move_iterator(eit1));
     }
 
   private:
     devector<table_type> buf;
     bool is_l;
-    bool is_init;
   };
 
   // TODO: implement this later together with meval
@@ -120,7 +123,9 @@ namespace detail {
 
   struct MOr {
     ptr_type<MState> l_state, r_state;
+    vector<size_t> r_layout_permutation;
     BinaryBuffer buf;
+    vector<table_type> eval(const database &db, size_t n_tps, size_t ts);
   };
 
   struct MNeg {
@@ -158,6 +163,7 @@ namespace detail {
     friend class Monitor;
     friend struct MNeg;
     friend struct MExists;
+    friend struct MOr;
 
   private:
     vector<table_type> eval(const database &db, size_t n_tps, size_t ts);
