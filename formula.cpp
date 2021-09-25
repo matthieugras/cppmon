@@ -6,7 +6,8 @@
 #include <util.h>
 #include <utility>
 
-namespace fo::detail {
+namespace fo {
+using std::literals::string_view_literals::operator""sv;
 
 size_t nat_from_json(const json &json_formula) {
   string_view nat_ty = json_formula.at(0).get<string_view>();
@@ -25,32 +26,6 @@ optional<size_t> enat_from_json(const json &json_formula) {
     return {};
   } else {
     throw std::runtime_error("invalid enat json");
-  }
-}
-
-// event_t member functions
-event_data::event_data(val_type &&val) noexcept : val(std::move(val)) {}
-
-bool event_data::operator==(const event_data &other) const {
-  return val == other.val;
-}
-
-event_data event_data::Int(int i) { return event_data(i); }
-
-event_data event_data::String(string s) { return event_data(std::move(s)); }
-
-event_data event_data::Float(double d) { return event_data(d); }
-
-event_data event_data::from_json(const json &json_formula) {
-  string_view event_ty = json_formula.at(0).get<string_view>();
-  if (event_ty == "EInt"sv) {
-    return event_data::Int(json_formula.at(1).get<int>());
-  } else if (event_ty == "EFloat"sv) {
-    return event_data::Float(json_formula.at(1).get<double>());
-  } else if (event_ty == "EString"sv) {
-    return event_data::String(json_formula.at(1).get<string>());
-  } else {
-    throw std::runtime_error("invalid event_data json");
   }
 }
 
@@ -187,9 +162,9 @@ Term Term::Mod(Term l, Term r) {
 Term Term::F2i(Term t) { return Term(f2i_t{uniq(std::move(t))}); }
 Term Term::I2f(Term t) { return Term(i2f_t{uniq(std::move(t))}); }
 
-bool Term::is_const() const { return holds_alternative<event_data>(val); }
-bool Term::is_var() const { return holds_alternative<var_t>(val); }
-const size_t* Term::get_if_var() const {
+bool Term::is_const() const { return var2::holds_alternative<event_data>(val); }
+bool Term::is_var() const { return var2::holds_alternative<var_t>(val); }
+const size_t *Term::get_if_var() const {
   if (const auto *ptr = var2::get_if<var_t>(&val)) {
     return &(ptr->idx);
   } else {
@@ -428,8 +403,7 @@ bool Formula::is_safe_assignment(const fv_set &vars) const {
   using var2::get;
   if (const eq_t *ptr = var2::get_if<eq_t>(&val)) {
     const auto &t1 = ptr->l, &t2 = ptr->r;
-    const size_t *var1 = t1.get_if_var(),
-                 *var2 = t2.get_if_var();
+    const size_t *var1 = t1.get_if_var(), *var2 = t2.get_if_var();
     if (var1 && var2) {
       return vars.contains(*var1) != vars.contains(*var2);
     } else if (var1) {
@@ -454,8 +428,7 @@ bool Formula::is_safe_formula() const {
       return false;
     } else if constexpr (is_same_v<T, neg_t>) {
       if (const auto *ptr = var2::get_if<eq_t>(&arg.phi->val)) {
-        const auto *var1 = ptr->l.get_if_var(),
-                   *var2 = ptr->r.get_if_var();
+        const auto *var1 = ptr->l.get_if_var(), *var2 = ptr->r.get_if_var();
         if (var1 && var2)
           return (*var1) == (*var2);
       }
@@ -523,4 +496,4 @@ bool Formula::is_future_bounded() const {
 /*bool Formula::is_monitorable() const {
   return is_safe_formula() && is_future_bounded();
 }*/
-}// namespace fo::detail
+}// namespace fo

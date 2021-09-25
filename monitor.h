@@ -16,6 +16,7 @@
 #include <util.h>
 #include <variant>
 #include <vector>
+#include <event_data.h>
 
 namespace monitor {
 namespace detail {
@@ -29,13 +30,13 @@ namespace detail {
   using std::vector;
   using var2::variant;
 
-  using fo::event_data;
+  using common::event_data;
   using fo::Formula;
   using fo::fv_set;
   using fo::Interval;
   using fo::name;
   using fo::Term;
-  using fo::detail::ptr_type;
+  using fo::ptr_type;
 
   using table_type = table<event_data>;
   using satisfactions_t = vector<pair<size_t, table_type>>;

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 include(CheckIPOSupported)
+include(FetchContent)
 
 project(cppmon VERSION 0.1
     DESCRIPTION "C++ Monitor for MFOTL"
@@ -17,6 +18,15 @@ set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 
+FetchContent_Declare(lexy
+    GIT_REPOSITORY https://github.com/foonathan/lexy.git
+    GIT_TAG a59057dbcd4dd87d89cf1a3cc149ce3a7d130ba3)
+
+FetchContent_MakeAvailable(lexy)
+
+add_subdirectory(common)
+add_subdirectory(parsing)
+
 # Table
 add_library(table STATIC table.cpp)
 target_include_directories(table PRIVATE
@@ -24,7 +34,8 @@ target_include_directories(table PRIVATE
 target_link_libraries(table
     CONAN_PKG::fmt
     CONAN_PKG::abseil
-    CONAN_PKG::boost)
+    CONAN_PKG::boost
+    common)
 
 # Formula
 add_library(formula STATIC formula.cpp)
@@ -34,7 +45,8 @@ target_link_libraries(formula
     CONAN_PKG::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost
-    CONAN_PKG::nlohmann_json)
+    CONAN_PKG::nlohmann_json
+    common)
 
 # Monitor
 add_library(monitor STATIC
@@ -55,6 +67,7 @@ target_include_directories(cppmon PRIVATE
 target_link_libraries(cppmon
     CONAN_PKG::fmt
     CONAN_PKG::abseil
+    traceparser
     monitor)
 
 # Tests

@@ -1,6 +1,7 @@
 builddir
 builddir_debug
 .idea
+cmake-build-debug
 
 .vscode
 .cache

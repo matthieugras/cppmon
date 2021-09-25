@@ -2,6 +2,9 @@
 #include <fmt/ranges.h>
 #include <formula.h>
 #include <gtest/gtest.h>
+#include <event_data.h>
+
+using common::event_data;
 
 TEST(Formula, FormulaFromJson) {
   using namespace fo;
