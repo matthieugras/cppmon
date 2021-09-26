@@ -57,6 +57,7 @@ target_include_directories(monitor PRIVATE
 target_link_libraries(monitor
     CONAN_PKG::abseil
     CONAN_PKG::boost
+    traceparser
     table
     formula)
 

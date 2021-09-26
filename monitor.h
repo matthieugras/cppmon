@@ -6,17 +6,18 @@
 #include <algorithm>
 #include <boost/container/devector.hpp>
 #include <boost/variant2/variant.hpp>
+#include <event_data.h>
 #include <formula.h>
 #include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <table.h>
+#include <traceparser.h>
 #include <type_traits>
 #include <util.h>
 #include <variant>
 #include <vector>
-#include <event_data.h>
 
 namespace monitor {
 namespace detail {
@@ -35,26 +36,22 @@ namespace detail {
   using fo::fv_set;
   using fo::Interval;
   using fo::name;
-  using fo::Term;
   using fo::ptr_type;
+  using fo::Term;
 
-  using table_type = table<event_data>;
-  using satisfactions_t = vector<pair<size_t, table_type>>;
-  class Monitor;
-
-  // TODO: check if this type is correct
-  // TODO: optimize translating predicate names to integers
-  using db_data = vector<flat_hash_set<vector<event_data>>>;
-  using database = flat_hash_map<name, db_data>;
+  using event_table = table<event_data>;
+  using satisfactions = vector<pair<size_t, event_table>>;
+  using database = parse::database;
+  class monitor;
 
   class BinaryBuffer {
   public:
     BinaryBuffer() : buf(), is_l(false){};
 
     template<typename F>
-    vector<table_type> update_and_reduce(vector<table_type> &new_l,
-                                         vector<table_type> &new_r, F &f) {
-      vector<table_type> res;
+    vector<event_table> update_and_reduce(vector<event_table> &new_l,
+                                          vector<event_table> &new_r, F &f) {
+      vector<event_table> res;
       auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
            eit2 = new_r.end();
       if (!is_l) {
@@ -84,7 +81,7 @@ namespace detail {
     }
 
   private:
-    devector<table_type> buf;
+    devector<event_table> buf;
     bool is_l;
   };
 
@@ -97,15 +94,15 @@ namespace detail {
   class MState;
 
   struct MRel {
-    table_type tab;
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
+    event_table tab;
+    vector<event_table> eval(const database &db, size_t ts) const;
   };
 
   struct MPred {
     name pred_name;
     vector<Term> pred_args;
     size_t n_fvs;
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
+    vector<event_table> eval(const database &db, size_t ts) const;
     optional<vector<event_data>>
     // variables
     match(const vector<event_data> &event_args) const;
@@ -128,24 +125,24 @@ namespace detail {
     ptr_type<MState> l_state, r_state;
     vector<size_t> r_layout_permutation;
     BinaryBuffer buf;
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts);
+    vector<event_table> eval(const database &db, size_t ts);
   };
 
   struct MNeg {
     ptr_type<MState> state;
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
+    vector<event_table> eval(const database &db, size_t ts) const;
   };
 
   struct MExists {
     size_t idx_of_bound_var;
     ptr_type<MState> state;
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts) const;
+    vector<event_table> eval(const database &db, size_t ts) const;
   };
 
   struct MPrev {
     Interval inter;
     bool is_first;
-    vector<table_type> past_data;
+    vector<event_table> past_data;
     vector<size_t> past_ts;
     ptr_type<MState> state;
   };
@@ -163,13 +160,15 @@ namespace detail {
 
 
   class MState {
-    friend class Monitor;
+    friend class monitor;
     friend struct MNeg;
     friend struct MExists;
     friend struct MOr;
 
+    MState() = default;
+
   private:
-    vector<table_type> eval(const database &db, size_t n_tps, size_t ts);
+    vector<event_table> eval(const database &db, size_t ts);
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
                              MAndRel, MAndAssign, MAnd>;
     explicit MState(val_type &&state);
@@ -187,21 +186,22 @@ namespace detail {
     val_type state;
   };
 
-  class Monitor {
+  class monitor {
   public:
-    explicit Monitor(const Formula &formula);
-    satisfactions_t step(const database &db, size_t ts);
+    explicit monitor(const Formula &formula);
+    monitor() = default;
+    satisfactions step(const database &db, size_t ts);
 
   private:
-    optional<MState> state;
+    MState state;
     table_layout res_layout;
-    size_t curr_tp;
+    size_t curr_tp{};
   };
 
 }// namespace detail
 
-using detail::Monitor;
-using detail::table_type;
+using detail::monitor;
+using detail::satisfactions;
 
 }// namespace monitor
 

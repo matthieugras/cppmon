@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <boost/hana.hpp>
 #include <stdexcept>
+#include <vector>
 
 namespace detail {
 

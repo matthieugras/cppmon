@@ -2,20 +2,16 @@
 
 namespace monitor::detail {
 // Monitor methods
-Monitor::Monitor(const Formula &formula) : curr_tp(0) {
+monitor::monitor(const Formula &formula) : curr_tp(0) {
   // TODO: verify that the first TP is 0
   auto [state_tmp, layout_tmp] = MState::make_formula_state(formula, 0);
   state = MState(std::move(state_tmp));
   res_layout = std::move(layout_tmp);
 }
 
-satisfactions_t Monitor::step(const database &db, size_t ts) {
-  size_t n_tps = 0;
-  if (!db.empty()) {
-    n_tps = db.cbegin()->second.size();
-  }
-  auto sats = state->eval(db, n_tps, ts);
-  satisfactions_t transformed_sats;
+satisfactions monitor::step(const database &db, size_t ts) {
+  auto sats = state.eval(db, ts);
+  satisfactions transformed_sats;
   transformed_sats.reserve(sats.size());
   size_t new_curr_tp = curr_tp;
   size_t n = sats.size();
@@ -29,11 +25,11 @@ satisfactions_t Monitor::step(const database &db, size_t ts) {
 // MState methods
 MState::MState(val_type &&state) : state(std::move(state)) {}
 
-vector<table_type> MState::eval(const database &db, size_t n_tps, size_t ts) {
-  auto visitor = [&db, n_tps, ts](auto &&arg) -> vector<table_type> {
+vector<event_table> MState::eval(const database &db, size_t ts) {
+  auto visitor = [&db, ts](auto &&arg) -> vector<event_table> {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel>) {
-      return arg.eval(db, n_tps, ts);
+      return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
     }
@@ -47,14 +43,14 @@ MState::make_eq_state(const fo::Formula::eq_t &arg) {
   const auto *lcst = l.get_if_const(), *rcst = r.get_if_const();
   if (lcst && rcst) {
     if (*lcst == *rcst)
-      return {MRel{table_type::unit_table()}, {}};
+      return {MRel{event_table::unit_table()}, {}};
     else
-      return {MRel{table_type::empty_table()}, {}};
+      return {MRel{event_table::empty_table()}, {}};
   }
   assert(l.is_var() && rcst || lcst && r.is_var());
   if (l.is_var())
     std::swap(lcst, rcst);
-  return {MRel{table_type::singleton_table(*lcst)}, {0}};
+  return {MRel{event_table::singleton_table(*lcst)}, {0}};
 }
 
 pair<MState::val_type, table_layout>
@@ -97,7 +93,7 @@ MState::make_formula_state(const Formula &formula, size_t n_bound_vars) {
         auto rec_st = make_formula_state(*arg.phi, n_bound_vars).first;
         return {MNeg{uniq(MState(std::move(rec_st)))}, {}};
       } else {
-        return {MRel{table_type::empty_table()}, {}};
+        return {MRel{event_table::empty_table()}, {}};
       }
     } else if constexpr (is_same_v<T, fo::Formula::eq_t>) {
       return make_eq_state(arg);
@@ -175,55 +171,47 @@ MPred::match(const vector<event_data> &event_args) const {
   return std::move(res);
 }
 
-vector<table_type> MPred::eval(const database &db, size_t n_tps, size_t) const {
+vector<event_table> MPred::eval(const database &db, size_t) const {
   const auto it = db.find(pred_name);
   if (it == db.end())
-    return {n_tps, table_type()};
-  vector<table_type> res;
-  res.reserve(n_tps);
-  for (const auto &ev_set : it->second) {
-    table_type tab;
-    for (const auto &ev : ev_set) {
-      auto new_row = match(ev);
-      if (new_row)
-        tab.add_row(std::move(*new_row));
-    }
-    res.push_back(std::move(tab));
+    return {event_table()};
+  event_table tab;
+  for (const auto &ev : it->second) {
+    auto new_row = match(ev);
+    if (new_row)
+      tab.add_row(std::move(*new_row));
   }
+  vector<event_table> res(1, event_table());
+  res[0] = std::move(tab);
   return res;
 }
 
-vector<table_type> MRel::eval(const database &, size_t, size_t) const {
-  return {tab};
-}
+vector<event_table> MRel::eval(const database &, size_t) const { return {tab}; }
 
-vector<table_type> MNeg::eval(const database &db, size_t n_tps,
-                              size_t ts) const {
-  auto rec_tabs = state->eval(db, n_tps, ts);
-  vector<table_type> res;
+vector<event_table> MNeg::eval(const database &db, size_t ts) const {
+  auto rec_tabs = state->eval(db, ts);
+  vector<event_table> res;
   res.reserve(rec_tabs.size());
   std::transform(rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res),
                  [](const auto &tab) {
                    if (tab.is_empty())
-                     return table_type::unit_table();
+                     return event_table::unit_table();
                    else
-                     return table_type::empty_table();
+                     return event_table::empty_table();
                  });
   return res;
 }
 
-vector<table_type> MExists::eval(const database &db, size_t n_tps,
-                                 size_t ts) const {
-  auto rec_tabs = state->eval(db, n_tps, ts);
+vector<event_table> MExists::eval(const database &db, size_t ts) const {
+  auto rec_tabs = state->eval(db, ts);
   std::for_each(rec_tabs.begin(), rec_tabs.end(),
                 [this](auto &tab) { tab.drop_col(idx_of_bound_var); });
   return rec_tabs;
 }
 
-vector<table_type> MOr::eval(const database &db, size_t n_tps, size_t ts) {
-  auto l_rec_tabs = l_state->eval(db, n_tps, ts),
-       r_rec_tabs = r_state->eval(db, n_tps, ts);
-  auto reduction_fn = [this](const table_type &tab1, const table_type &tab2) {
+vector<event_table> MOr::eval(const database &db, size_t ts) {
+  auto l_rec_tabs = l_state->eval(db, ts), r_rec_tabs = r_state->eval(db, ts);
+  auto reduction_fn = [this](const event_table &tab1, const event_table &tab2) {
     return tab1.t_union(tab2, r_layout_permutation);
   };
   return buf.update_and_reduce(l_rec_tabs, r_rec_tabs, reduction_fn);

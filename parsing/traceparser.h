@@ -100,6 +100,7 @@ private:
 class trace_parser {
 public:
   explicit trace_parser(signature sig) : sig_(std::move(sig)) {}
+  trace_parser() = default;
   timestamped_database parse_database(std::string_view db);
 
 private:
