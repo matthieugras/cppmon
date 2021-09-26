@@ -1,3 +1,0 @@
-option('withsan', type: 'boolean', value: false)
-option('withjemalloc', type: 'boolean', value: false)
-
