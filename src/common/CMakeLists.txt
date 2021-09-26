@@ -1,4 +1,5 @@
 set(COMMON_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_library(common STATIC event_data.cpp)
 target_include_directories(common PUBLIC
     ${COMMON_INCLUDES})

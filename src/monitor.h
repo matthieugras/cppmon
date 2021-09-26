@@ -111,6 +111,7 @@ namespace detail {
   struct MAnd {
     bool is_positive;
     BinaryBuffer buf;
+
     ptr_type<MState> l_state, r_state;
   };
 

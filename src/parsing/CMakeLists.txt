@@ -1,4 +1,5 @@
 set(PARSER_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_library(traceparser STATIC traceparser.cpp)
 target_include_directories(traceparser PUBLIC
     ${PARSER_INCLUDES})
