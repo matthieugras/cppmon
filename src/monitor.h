@@ -4,6 +4,7 @@
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
+#include <binary_buffer.h>
 #include <boost/container/devector.hpp>
 #include <boost/variant2/variant.hpp>
 #include <event_data.h>
@@ -40,50 +41,11 @@ namespace detail {
   using fo::Term;
 
   using event_table = table<event_data>;
+  using event_table_vec = vector<event_table>;
   using satisfactions = vector<pair<size_t, event_table>>;
   using database = parse::database;
+  using binary_buffer = common::binary_buffer<event_table>;
   class monitor;
-
-  class BinaryBuffer {
-  public:
-    BinaryBuffer() : buf(), is_l(false){};
-
-    template<typename F>
-    vector<event_table> update_and_reduce(vector<event_table> &new_l,
-                                          vector<event_table> &new_r, F &f) {
-      vector<event_table> res;
-      auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
-           eit2 = new_r.end();
-      if (!is_l) {
-        std::swap(it1, it2);
-        std::swap(eit1, eit2);
-      }
-      for (; !buf.empty() && it2 != eit2; buf.pop_front(), ++it2) {
-        if (is_l)
-          res.push_back(f(buf.front(), *it2));
-        else
-          res.push_back(f(*it2, buf.front()));
-      }
-      for (; it1 != eit1 && it2 != eit2; it1++, it2++) {
-        if (is_l)
-          res.push_back(f(*it1, *it2));
-        else
-          res.push_back(f(*it2, *it1));
-      }
-      if (it1 == eit1) {
-        is_l = !is_l;
-        std::swap(it1, it2);
-        std::swap(eit1, eit2);
-      }
-      buf.insert(buf.end(), std::make_move_iterator(it1),
-                 std::make_move_iterator(eit1));
-      return res;
-    }
-
-  private:
-    devector<event_table> buf;
-    bool is_l;
-  };
 
   // TODO: implement this later together with meval
   struct MSaux {};
@@ -95,24 +57,24 @@ namespace detail {
 
   struct MRel {
     event_table tab;
-    vector<event_table> eval(const database &db, size_t ts) const;
+    event_table_vec eval(const database &db, size_t ts);
   };
 
   struct MPred {
     name pred_name;
     vector<Term> pred_args;
     size_t n_fvs;
-    vector<event_table> eval(const database &db, size_t ts) const;
+    event_table_vec eval(const database &db, size_t ts);
     optional<vector<event_data>>
-    // variables
     match(const vector<event_data> &event_args) const;
   };
 
   struct MAnd {
-    bool is_positive;
-    BinaryBuffer buf;
-
+    binary_buffer buf;
+    vector<size_t> join_idx_l, join_idx_r;
     ptr_type<MState> l_state, r_state;
+    bool is_right_negated;
+    event_table_vec eval(const database &db, size_t ts);
   };
 
   // TODO: implement this later together with meval
@@ -125,25 +87,25 @@ namespace detail {
   struct MOr {
     ptr_type<MState> l_state, r_state;
     vector<size_t> r_layout_permutation;
-    BinaryBuffer buf;
-    vector<event_table> eval(const database &db, size_t ts);
+    binary_buffer buf;
+    event_table_vec eval(const database &db, size_t ts);
   };
 
   struct MNeg {
     ptr_type<MState> state;
-    vector<event_table> eval(const database &db, size_t ts) const;
+    event_table_vec eval(const database &db, size_t ts);
   };
 
   struct MExists {
     size_t idx_of_bound_var;
     ptr_type<MState> state;
-    vector<event_table> eval(const database &db, size_t ts) const;
+    event_table_vec eval(const database &db, size_t ts);
   };
 
   struct MPrev {
     Interval inter;
     bool is_first;
-    vector<event_table> past_data;
+    event_table_vec past_data;
     vector<size_t> past_ts;
     ptr_type<MState> state;
   };
@@ -159,38 +121,52 @@ namespace detail {
 
   struct MUntil {};
 
+  template<typename F, typename T>
+  event_table_vec apply_recursive_bin_reduction(F &f, T &t1, T &t2,
+                                                binary_buffer &buf,
+                                                const database &db, size_t ts) {
+    auto l_rec_tabs = t1.eval(db, ts), r_rec_tabs = t2.eval(db, ts);
+    return buf.template update_and_reduce(l_rec_tabs, r_rec_tabs, f);
+  }
+
 
   class MState {
     friend class monitor;
     friend struct MNeg;
     friend struct MExists;
     friend struct MOr;
+    friend struct MAnd;
+    template<typename F, typename T>
+    friend event_table_vec
+    apply_recursive_bin_reduction(F &f, T &t1, T &t2, binary_buffer &buf,
+                                  const database &db, size_t ts);
 
     MState() = default;
 
   private:
-    vector<event_table> eval(const database &db, size_t ts);
+    event_table_vec eval(const database &db, size_t ts);
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
                              MAndRel, MAndAssign, MAnd>;
+    using init_pair = pair<val_type, table_layout>;
     explicit MState(val_type &&state);
     static inline constexpr auto uniq = [](auto &&arg) -> decltype(auto) {
       return std::make_unique<MState>(std::forward<decltype(arg)>(arg));
     };
-    static pair<val_type, table_layout>
-    make_eq_state(const fo::Formula::eq_t &arg);
+    static init_pair init_eq_state(const fo::Formula::eq_t &arg);
 
-    static pair<val_type, table_layout>
-    make_and_state(const fo::Formula::and_t &arg, size_t n_bound_vars);
+    static init_pair init_and_state(const fo::Formula::and_t &arg);
 
-    static pair<val_type, table_layout>
-    make_formula_state(const Formula &formula, size_t n_bound_vars);
+    static init_pair init_and_join_state(const fo::Formula::and_t &arg,
+                                         bool right_negated);
+
+    static init_pair init_mstate(const Formula &formula);
     val_type state;
   };
 
   class monitor {
   public:
-    explicit monitor(const Formula &formula);
     monitor() = default;
+    explicit monitor(const Formula &formula);
     satisfactions step(const database &db, size_t ts);
 
   private:

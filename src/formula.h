@@ -25,15 +25,15 @@ struct MPred;
 namespace fo {
 namespace {
   namespace var2 = boost::variant2;
-  using var2::variant;
-  using std::vector;
-  using std::optional;
-  using std::string;
-  using std::string_view;
   using boost::equality_comparable;
   using common::event_data;
   using nlohmann::json;
-}
+  using std::optional;
+  using std::string;
+  using std::string_view;
+  using std::vector;
+  using var2::variant;
+}// namespace
 
 
 using name = std::string;
@@ -149,6 +149,7 @@ public:
   static Formula Next(Interval inter, Formula phi);
   static Formula Since(Interval inter, Formula phil, Formula phir);
   static Formula Until(Interval inter, Formula phil, Formula phir);
+  Formula *inner_if_neg() const;
   [[nodiscard]] fv_set fvs() const;
   [[nodiscard]] size_t degree() const;
   [[nodiscard]] bool is_constraint() const;

@@ -19,6 +19,7 @@ get_var_2_idx(const table_layout &l) {
 
 tuple<table_layout, vector<size_t>, vector<size_t>>
 get_join_layout(const table_layout &l1, const table_layout &l2) {
+  //TODO: fix this so that is supports antijoins
   size_t n1 = l1.size(), n2 = l2.size();
   vector<size_t> comm_idx1, comm_idx2;
   table_layout layout;

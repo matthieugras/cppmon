@@ -34,7 +34,7 @@ Interval::Interval(size_t l, size_t u, bool bounded)
     : l(l), u(u), bounded(bounded) {
 #ifndef NDEBUG
   if (bounded && l > u)
-    throw std::invalid_argument("l <= u");
+    throw std::invalid_argument("must have l <= u");
 #endif
 }
 
@@ -208,6 +208,13 @@ Formula::Formula(const Formula &formula) : val(copy_val(formula.val)) {}
 Formula::Formula(Formula &&formula) noexcept : val(std::move(formula.val)) {}
 Formula::Formula(string_view json_formula)
     : Formula(Formula::from_json(json::parse(json_formula))) {}
+
+Formula *Formula::inner_if_neg() const {
+  if (auto *ptr = var2::get_if<neg_t>(&val)) {
+    return ptr->phi.get();
+  }
+  return nullptr;
+}
 
 bool Formula::operator==(const Formula &other) const {
   auto visitor = [](auto &&arg1, auto &&arg2) -> bool {
@@ -459,13 +466,15 @@ bool Formula::is_safe_formula() const {
     } else if constexpr (any_type_equal_v<T, since_t, until_t>) {
       if (!arg.inter.is_bounded())
         return false;
-      const auto &phil = arg.phil, &phir = arg.phir;
-      if (is_subset(phil->fvs(), phir->fvs()) && phil->is_safe_formula())
+      const auto &phil = *arg.phil, &phir = *arg.phir;
+      if (is_subset(phil.fvs(), phir.fvs()) && phil.is_safe_formula())
         return true;
       if (!arg.phir->is_safe_formula())
         return false;
-      const auto *neg_ptr = var2::get_if<neg_t>(&phil->val);
-      return (neg_ptr && neg_ptr->phi->is_safe_formula());
+      if (const auto *neg_ptr = phil.inner_if_neg()) {
+        return neg_ptr->is_safe_formula();
+      }
+      return false;
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }

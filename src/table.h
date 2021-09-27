@@ -141,7 +141,7 @@ public:
   table<T> anti_join(const table<T> &tab, const vector<size_t> &join_idx1,
                      const vector<size_t> &join_idx2) const {
     // TODO: fix & test this
-    auto hash_map = tab.template compute_join_hash<TblImplType>(join_idx2);
+    /*auto hash_map = tab.template compute_join_hash<TblImplType>(join_idx2);
     table<T> new_tab(m_n_cols);
     new_tab.idx_to_var = this->idx_to_var;
     new_tab.m_n_cols = this->m_n_cols;
@@ -152,7 +152,7 @@ public:
         new_tab.m_tab_impl.insert(row);
       }
     }
-    return new_tab;
+    return new_tab;*/
   }
 
   table<T> t_union(const table<T> &tab,
