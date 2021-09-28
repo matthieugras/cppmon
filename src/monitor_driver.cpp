@@ -1,6 +1,5 @@
 #include <cassert>
 #include <fmt/core.h>
-#include <fmt/ranges.h>
 #include <monitor.h>
 #include <monitor_driver.h>
 #include <string>

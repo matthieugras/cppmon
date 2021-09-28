@@ -67,10 +67,40 @@ bool Interval::is_bounded() const { return bounded; }
 
 // Term member functions
 Term::Term(const Term &t) : val(copy_val(t.val)) {}
-Term::Term(Term &&t) noexcept : val(std::move(t.val)) {}
 
 Term::Term(val_type &&val) noexcept : val(std::move(val)) {}
 Term::Term(const val_type &val) : val(copy_val(val)) {}
+
+event_data Term::eval(const vector<size_t> &var_2_idx,
+                      const vector<event_data> &tuple) const {
+  auto visitor = [&var_2_idx, &tuple](auto &&arg) -> event_data {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, event_data>) {
+      return arg;
+    } else if constexpr (std::is_same_v<T, var_t>) {
+      return tuple[var_2_idx[arg.idx]];
+    } else if constexpr (std::is_same_v<T, plus_t>) {
+      return arg.l->eval(var_2_idx, tuple) + arg.r->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, minus_t>) {
+      return arg.l->eval(var_2_idx, tuple) - arg.r->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, uminus_t>) {
+      return -arg.t->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, mult_t>) {
+      return arg.l->eval(var_2_idx, tuple) * arg.r->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, div_t>) {
+      return arg.l->eval(var_2_idx, tuple) / arg.r->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, mod_t>) {
+      return arg.l->eval(var_2_idx, tuple) % arg.r->eval(var_2_idx, tuple);
+    } else if constexpr (std::is_same_v<T, f2i_t>) {
+      return arg.t->eval(var_2_idx, tuple).float_to_int();
+    } else if constexpr (std::is_same_v<T, i2f_t>) {
+      return arg.t->eval(var_2_idx, tuple).int_to_float();
+    } else {
+      static_assert(always_false_v<T>, "not exhaustive");
+    }
+  };
+  return var2::visit(visitor, val);
+}
 
 bool Term::operator==(const Term &other) const {
   auto visitor = [](auto &&arg1, auto &&arg2) -> bool {

@@ -53,76 +53,8 @@ namespace detail {
   // TODO: implement this later together with meval
   struct MUaux {};
 
-  class MState;
-
-  struct MRel {
-    event_table tab;
-    event_table_vec eval(const database &db, size_t ts);
-  };
-
-  struct MPred {
-    name pred_name;
-    vector<Term> pred_args;
-    size_t n_fvs;
-    event_table_vec eval(const database &db, size_t ts);
-    optional<vector<event_data>>
-    match(const vector<event_data> &event_args) const;
-  };
-
-  struct MAnd {
-    binary_buffer buf;
-    vector<size_t> join_idx_l, join_idx_r;
-    ptr_type<MState> l_state, r_state;
-    bool is_right_negated;
-    event_table_vec eval(const database &db, size_t ts);
-  };
-
-  // TODO: implement this later together with meval
-  struct MAndAssign {};
-
-  // TODO: implement this later together with meval
-  struct MAndRel {};
-
-
-  struct MOr {
-    ptr_type<MState> l_state, r_state;
-    vector<size_t> r_layout_permutation;
-    binary_buffer buf;
-    event_table_vec eval(const database &db, size_t ts);
-  };
-
-  struct MNeg {
-    ptr_type<MState> state;
-    event_table_vec eval(const database &db, size_t ts);
-  };
-
-  struct MExists {
-    size_t idx_of_bound_var;
-    ptr_type<MState> state;
-    event_table_vec eval(const database &db, size_t ts);
-  };
-
-  struct MPrev {
-    Interval inter;
-    bool is_first;
-    event_table_vec past_data;
-    vector<size_t> past_ts;
-    ptr_type<MState> state;
-  };
-
-  struct MNext {
-    Interval inter;
-    bool is_first;
-    vector<size_t> past_ts;
-    ptr_type<MState> state;
-  };
-
-  struct MSince {};
-
-  struct MUntil {};
-
   template<typename F, typename T>
-  event_table_vec apply_recursive_bin_reduction(F &f, T &t1, T &t2,
+  event_table_vec apply_recursive_bin_reduction(F f, T &t1, T &t2,
                                                 binary_buffer &buf,
                                                 const database &db, size_t ts) {
     auto l_rec_tabs = t1.eval(db, ts), r_rec_tabs = t2.eval(db, ts);
@@ -132,32 +64,108 @@ namespace detail {
 
   class MState {
     friend class monitor;
-    friend struct MNeg;
-    friend struct MExists;
-    friend struct MOr;
-    friend struct MAnd;
+
     template<typename F, typename T>
     friend event_table_vec
-    apply_recursive_bin_reduction(F &f, T &t1, T &t2, binary_buffer &buf,
+    apply_recursive_bin_reduction(F f, T &t1, T &t2, binary_buffer &buf,
                                   const database &db, size_t ts);
 
     MState() = default;
+    MState& operator=(MState &&other) = default;
+
 
   private:
     event_table_vec eval(const database &db, size_t ts);
+    struct MRel {
+      event_table tab;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    struct MPred {
+      name pred_name;
+      vector<Term> pred_args;
+      size_t n_fvs;
+      event_table_vec eval(const database &db, size_t ts);
+      optional<vector<event_data>>
+      match(const vector<event_data> &event_args) const;
+    };
+
+    struct MAnd {
+      binary_buffer buf;
+      vector<size_t> join_idx_l, join_idx_r;
+      ptr_type<MState> l_state, r_state;
+      bool is_right_negated;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    // TODO: implement this later together with meval
+    struct MAndAssign {};
+
+    struct MAndRel {
+      ptr_type<MState> state;
+      vector<size_t> var_2_idx;
+      fo::Term l, r;
+      enum cst_type_t
+      {
+        CST_EQ,
+        CST_LESS,
+        CST_LESS_EQ
+      } cst_type;
+      bool cst_neg;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    struct MOr {
+      ptr_type<MState> l_state, r_state;
+      vector<size_t> r_layout_permutation;
+      binary_buffer buf;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    struct MNeg {
+      ptr_type<MState> state;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    struct MExists {
+      size_t idx_of_bound_var;
+      ptr_type<MState> state;
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    struct MPrev {
+      Interval inter;
+      bool is_first;
+      event_table_vec past_data;
+      vector<size_t> past_ts;
+      ptr_type<MState> state;
+    };
+
+    struct MNext {
+      Interval inter;
+      bool is_first;
+      vector<size_t> past_ts;
+      ptr_type<MState> state;
+    };
+
+    struct MSince {};
+
+    struct MUntil {};
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
                              MAndRel, MAndAssign, MAnd>;
     using init_pair = pair<val_type, table_layout>;
     explicit MState(val_type &&state);
-    static inline constexpr auto uniq = [](auto &&arg) -> decltype(auto) {
-      return std::make_unique<MState>(std::forward<decltype(arg)>(arg));
-    };
+    template<typename F>
+    static inline std::unique_ptr<MState> uniq(F &&arg) {
+      return std::unique_ptr<MState>(new MState(std::forward<F>(arg)));
+    }
     static init_pair init_eq_state(const fo::Formula::eq_t &arg);
 
     static init_pair init_and_state(const fo::Formula::and_t &arg);
 
     static init_pair init_and_join_state(const fo::Formula::and_t &arg,
                                          bool right_negated);
+    static init_pair init_and_rel_state(const fo::Formula::and_t &arg);
 
     static init_pair init_mstate(const Formula &formula);
     val_type state;

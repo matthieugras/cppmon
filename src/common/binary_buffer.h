@@ -2,8 +2,9 @@
 #define CPPMON_BINARY_BUFFER_H
 
 #include <boost/container/devector.hpp>
-#include <vector>
 #include <iterator>
+#include <type_traits>
+#include <vector>
 
 namespace common {
 
@@ -12,9 +13,11 @@ class binary_buffer {
 public:
   binary_buffer() : is_l(false){};
 
+  // After calling this function new_l and new_r will contain garbage
   template<typename F>
-  std::vector<T> update_and_reduce(std::vector<T> &new_l, std::vector<T> &new_r, F &f) {
-    std::vector<T> res;
+  auto update_and_reduce(std::vector<T> &new_l, std::vector<T> &new_r, F f) {
+    using R = std::invoke_result_t<decltype(f), T, T>;
+    std::vector<R> res;
     auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
          eit2 = new_r.end();
     if (!is_l) {
@@ -33,7 +36,7 @@ public:
       else
         res.push_back(f(*it2, *it1));
     }
-    if (it1 == eit1) {
+    if (it1 == eit1 && buf.empty()) {
       is_l = !is_l;
       std::swap(it1, it2);
       std::swap(eit1, eit2);

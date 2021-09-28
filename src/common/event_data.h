@@ -5,8 +5,10 @@
 #include <boost/variant2/variant.hpp>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <util.h>
 
 namespace common {
 namespace {
@@ -15,9 +17,20 @@ namespace {
   using var2::variant;
 }// namespace
 class event_data : boost::equality_comparable<event_data> {
+  friend fmt::formatter<event_data>;
+
 public:
   bool operator==(const event_data &other) const;
-  friend fmt::formatter<event_data>;
+  bool operator<=(const event_data &other) const;
+  bool operator<(const event_data &other) const;
+  event_data operator+(const event_data &other) const;
+  event_data operator-(const event_data &other) const;
+  event_data operator-() const;
+  event_data operator*(const event_data &other) const;
+  event_data operator/(const event_data &other) const;
+  event_data operator%(const event_data &other) const;
+  event_data int_to_float() const;
+  event_data float_to_int() const;
 
   template<typename H>
   friend H AbslHashValue(H h, const event_data &d) {
@@ -30,6 +43,7 @@ public:
       return H::combine(std::move(h), *sptr);
     }
   }
+  static event_data nan();
   static event_data Int(int i);
   static event_data Float(double d);
   static event_data String(std::string s);
@@ -39,6 +53,29 @@ private:
   using val_type = variant<int, double, std::string>;
   explicit event_data(val_type &&val) noexcept;
   val_type val;
+
+  template<typename F>
+  static event_data apply_arith_bin_op(F op, const event_data &l,
+                                       const event_data &r) {
+    using std::is_same_v;
+    auto visitor = [op](auto &&l, auto &&r) {
+      using TL = std::decay_t<decltype(l)>;
+      using TR = std::decay_t<decltype(r)>;
+
+      if constexpr (is_same_v<TL, int> && is_same_v<TR, int>) {
+        return Int(op(l, r));
+      } else if constexpr (is_same_v<TL, int> && is_same_v<TR, double>) {
+        return Float(op(static_cast<double>(l), r));
+      } else if constexpr (is_same_v<TL, double> && is_same_v<TR, int>) {
+        return Float(op(l, static_cast<double>(r)));
+      } else if constexpr (is_same_v<TL, double> && is_same_v<TR, double>) {
+        return Float(op(l, r));
+      } else {
+        return nan();
+      }
+    };
+    return var2::visit(visitor, l.val, r.val);
+  }
 };
 }// namespace common
 

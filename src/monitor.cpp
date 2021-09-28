@@ -28,7 +28,8 @@ MState::MState(val_type &&state) : state(std::move(state)) {}
 event_table_vec MState::eval(const database &db, size_t ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel>) {
+    if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel,
+                                   MAnd>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -60,20 +61,55 @@ MState::init_pair MState::init_and_join_state(const fo::Formula::and_t &arg,
   auto [res_layout, join_idx_l, join_idx_r] =
     get_join_layout(l_layout, r_layout);
   return {MAnd{binary_buffer(), join_idx_l, join_idx_r,
-               uniq(MState(std::move(l_state))),
-               uniq(MState(std::move(r_state))), right_negated},
+               uniq(std::move(l_state)), uniq(std::move(r_state)),
+               right_negated},
           std::move(res_layout)};
 }
+
+MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
+  const auto &phil = *arg.phil;
+  const auto *phir = arg.phir.get();
+  auto [rec_state, rec_layout] = init_mstate(phil);
+  bool cst_neg = false;
+
+  if (const auto *const neg_ptr = phir->inner_if_neg()) {
+    cst_neg = true;
+    phir = neg_ptr;
+  }
+
+  const fo::Term *t1 = nullptr, *t2 = nullptr;
+  auto cst_type = MAndRel::CST_EQ;
+  if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&phir->val)) {
+    t1 = &ptr->l;
+    t2 = &ptr->r;
+  } else if ((ptr = var2::get_if<fo::Formula::eq_t>(&phir->val))) {
+    cst_type = MAndRel::CST_LESS;
+    t1 = &ptr->l;
+    t2 = &ptr->r;
+  } else if ((ptr = var2::get_if<fo::Formula::eq_t>(&phir->val))) {
+    cst_type = MAndRel::CST_LESS_EQ;
+    t1 = &ptr->l;
+    t2 = &ptr->r;
+  } else {
+    throw std::runtime_error("unknown constraint");
+  }
+  vector<size_t> var_2_idx(rec_layout.size());
+  for (size_t i = 0; i < rec_layout.size(); ++i)
+    var_2_idx[rec_layout[i]] = i;
+  return {MAndRel{uniq(std::move(rec_state)), std::move(var_2_idx), *t1, *t2,
+                  cst_type, cst_neg},
+          std::move(rec_layout)};
+}
+
 
 MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
   const auto &phil = *arg.phil, &phir = *arg.phir;
   if (phir.is_safe_assignment(phil.fvs())) {
     throw not_implemented_error();
   } else if (phir.is_safe_formula()) {
-    init_and_join_state(arg, false);
+    return init_and_join_state(arg, false);
   } else if (phir.is_constraint()) {
-    throw not_implemented_error();
-    // return MAndRel{};
+    return init_and_rel_state(arg);
   } else if (const auto *phir_neg = phir.inner_if_neg()) {
     // TODO: fix the get_join_layout function to support anti_joins
     return init_and_join_state(arg, true);
@@ -90,7 +126,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
     if constexpr (is_same_v<T, fo::Formula::neg_t>) {
       if (arg.phi->fvs().empty()) {
         auto rec_st = init_mstate(*arg.phi).first;
-        return {MNeg{uniq(MState(std::move(rec_st)))}, {}};
+        return {MNeg{uniq(std::move(rec_st))}, {}};
       } else {
         return {MRel{event_table::empty_table()}, {}};
       }
@@ -111,9 +147,8 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       auto [l_state, l_layout] = init_mstate(*arg.phil);
       auto [r_state, r_layout] = init_mstate(*arg.phir);
       auto permutation = find_permutation(l_layout, r_layout);
-      return {MOr{uniq(MState(std::move(l_state))),
-                  uniq(MState(std::move(r_state))), permutation,
-                  binary_buffer()},
+      return {MOr{uniq(std::move(l_state)), uniq(std::move(r_state)),
+                  permutation, binary_buffer()},
               l_layout};
     } else if constexpr (is_same_v<T, fo::Formula::and_t>) {
       throw not_implemented_error();
@@ -129,8 +164,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
         if (i != drop_idx)
           this_layout.push_back(rec_layout[i] - 1);
       }
-      return {MExists{drop_idx, uniq(MState(std::move(rec_state)))},
-              this_layout};
+      return {MExists{drop_idx, uniq(std::move(rec_state))}, this_layout};
     } else if constexpr (is_same_v<T, fo::Formula::prev_t>) {
       throw not_implemented_error();
     } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
@@ -147,7 +181,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
 }
 
 optional<vector<event_data>>
-MPred::match(const vector<event_data> &event_args) const {
+MState::MPred::match(const vector<event_data> &event_args) const {
   vector<event_data> res;
   res.reserve(n_fvs);
   assert(event_args.size() == pred_args.size());
@@ -163,7 +197,7 @@ MPred::match(const vector<event_data> &event_args) const {
   return std::move(res);
 }
 
-event_table_vec MPred::eval(const database &db, size_t) {
+event_table_vec MState::MPred::eval(const database &db, size_t) {
   const auto it = db.find(pred_name);
   if (it == db.end())
     return {event_table()};
@@ -178,30 +212,30 @@ event_table_vec MPred::eval(const database &db, size_t) {
   return res;
 }
 
-event_table_vec MRel::eval(const database &, size_t) { return {tab}; }
+event_table_vec MState::MRel::eval(const database &, size_t) { return {tab}; }
 
-event_table_vec MNeg::eval(const database &db, size_t ts) {
+event_table_vec MState::MNeg::eval(const database &db, size_t ts) {
   auto rec_tabs = state->eval(db, ts);
-  event_table_vec res;
-  res.reserve(rec_tabs.size());
-  std::transform(rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res),
-                 [](const auto &tab) {
-                   if (tab.is_empty())
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size());
+  std::transform(rec_tabs.cbegin(), rec_tabs.cend(),
+                 std::back_inserter(res_tabs), [](const auto &tab) {
+                   if (tab.empty())
                      return event_table::unit_table();
                    else
                      return event_table::empty_table();
                  });
-  return res;
+  return res_tabs;
 }
 
-event_table_vec MExists::eval(const database &db, size_t ts) {
+event_table_vec MState::MExists::eval(const database &db, size_t ts) {
   auto rec_tabs = state->eval(db, ts);
   std::for_each(rec_tabs.begin(), rec_tabs.end(),
                 [this](auto &tab) { tab.drop_col(idx_of_bound_var); });
   return rec_tabs;
 }
 
-event_table_vec MOr::eval(const database &db, size_t ts) {
+event_table_vec MState::MOr::eval(const database &db, size_t ts) {
   auto reduction_fn = [this](const event_table &tab1, const event_table &tab2) {
     return tab1.t_union(tab2, r_layout_permutation);
   };
@@ -209,7 +243,7 @@ event_table_vec MOr::eval(const database &db, size_t ts) {
                                        db, ts);
 }
 
-event_table_vec MAnd::eval(const database &db, size_t ts) {
+event_table_vec MState::MAnd::eval(const database &db, size_t ts) {
   auto reduction_fn = [this](const event_table &tab1, const event_table &tab2) {
     if (is_right_negated)
       return tab1.anti_join(tab2, join_idx_l, join_idx_r);
@@ -218,6 +252,29 @@ event_table_vec MAnd::eval(const database &db, size_t ts) {
   };
   return apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state, buf,
                                        db, ts);
+}
+
+event_table_vec MState::MAndRel::eval(const database &db, size_t ts) {
+  auto rec_tabs = state->eval(db, ts);
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size());
+  auto filter_fn = [this](const auto &row) {
+    auto l_res = l.eval(var_2_idx, row), r_res = r.eval(var_2_idx, row);
+    bool ret;
+    if (cst_type == CST_EQ)
+      ret = l_res == r_res;
+    else if (cst_type == CST_LESS)
+      ret = l_res < r_res;
+    else
+      ret = l_res <= r_res;
+    if (cst_neg)
+      ret = !ret;
+    return ret;
+  };
+  std::transform(
+    rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res_tabs),
+    [filter_fn](const auto &tab) { return tab.filter(filter_fn); });
+  return res_tabs;
 }
 
 }// namespace monitor::detail

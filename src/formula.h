@@ -50,11 +50,12 @@ struct Formula;
 struct Term : equality_comparable<Term> {
   friend Formula;
   friend ::monitor::detail::MPred;
-  friend class monitor::detail::MState;
+  friend class ::monitor::detail::MState;
 
 public:
   Term(const Term &t);
-  Term(Term &&t) noexcept;
+  Term(Term &&t) noexcept = default;
+  Term &operator=(Term &&other) = default;
   bool operator==(const Term &other) const;
   static Term Var(size_t idx);
   static Term Const(event_data c);
@@ -71,6 +72,8 @@ public:
   [[nodiscard]] const size_t *get_if_var() const;
   [[nodiscard]] const event_data *get_if_const() const;
   [[nodiscard]] fv_set fvs() const;
+  [[nodiscard]] event_data eval(const vector<size_t> &var_2_idx,
+                                const vector<event_data> &tuple) const;
 
 private:
   struct var_t {
@@ -149,14 +152,12 @@ public:
   static Formula Next(Interval inter, Formula phi);
   static Formula Since(Interval inter, Formula phil, Formula phir);
   static Formula Until(Interval inter, Formula phil, Formula phir);
-  Formula *inner_if_neg() const;
+  [[nodiscard]] Formula *inner_if_neg() const;
   [[nodiscard]] fv_set fvs() const;
   [[nodiscard]] size_t degree() const;
   [[nodiscard]] bool is_constraint() const;
   [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
-  //[[nodiscard]] bool is_future_bounded() const;
   [[nodiscard]] bool is_safe_formula() const;
-  //[[nodiscard]] bool is_monitorable() const;
 
 private:
   struct pred_t {
