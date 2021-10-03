@@ -5,6 +5,9 @@
 #include <boost/hana.hpp>
 #include <stdexcept>
 #include <vector>
+#include <string>
+#include <fstream>
+#include <filesystem>
 
 namespace detail {
 
@@ -38,6 +41,8 @@ struct overloaded : Ts... {
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 }// namespace detail
+
+std::string read_file(const std::filesystem::path &path);
 
 using detail::always_false_v;
 using detail::any_type_equal_v;

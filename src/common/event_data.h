@@ -31,6 +31,7 @@ public:
   event_data operator%(const event_data &other) const;
   event_data int_to_float() const;
   event_data float_to_int() const;
+  const int *get_if_int() const;
 
   template<typename H>
   friend H AbslHashValue(H h, const event_data &d) {
@@ -81,27 +82,40 @@ private:
 
 template<>
 struct [[maybe_unused]] fmt::formatter<common::event_data> {
+  // Presentation format: `n` - normal with constructor, `m` - monpoly database
+  // format
+
+  char presentation = 'n';
+
   constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
-  -> decltype(auto) {
-    auto it = ctx.begin();
-    if (it != ctx.end() && *it != '}')
+  -> decltype(ctx.begin()) {
+    auto it = ctx.begin(), end = ctx.end();
+    if (it != end && (*it == 'm'))
+      presentation = *it++;
+    if (it != end && *it != '}')
       throw format_error(
-        "invalid format - only empty format strings are accepted");
+        R"(invalid format: ":m" for monpoly, ":n" for normal )");
     return it;
   }
 
   template<typename FormatContext>
   auto format
     [[maybe_unused]] (const common::event_data &tab, FormatContext &ctx)
-    -> decltype(auto) {
+    -> decltype(ctx.out()) {
     using boost::variant2::get_if;
+    // TODO: fix this - probably a compiler bug
     if (const int *iptr = get_if<int>(&tab.val)) {
-      return format_to(ctx.out(), "Int({})", *iptr);
+      return format_to(ctx.out(), /*(presentation == 'n') ? "Int({})" :*/ "{}",
+                       *iptr);
     } else if (const double *dptr = get_if<double>(&tab.val)) {
-      return format_to(ctx.out(), "Float({})", *dptr);
+      return format_to(ctx.out(),
+                       /*(presentation == 'n') ? "Str(\"{}\")" :*/ "{:.5f}",
+                       *dptr);
     } else {
       const std::string *sptr = get_if<std::string>(&tab.val);
-      return format_to(ctx.out(), "Str(\"{}\")", *sptr);
+      return format_to(ctx.out(),
+                       /*presentation == 'n' ? "Str(\"{}\")" :*/ "\"{}\"",
+                       *sptr);
     }
   }
 };

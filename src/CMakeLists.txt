@@ -1,5 +1,6 @@
 add_subdirectory(common)
 add_subdirectory(parsing)
+add_subdirectory(dbgenerator)
 
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -8,7 +9,7 @@ add_library(table STATIC table.cpp)
 target_include_directories(table PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(table
-    CONAN_PKG::fmt
+    fmt::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost
     common)
@@ -18,7 +19,7 @@ add_library(formula STATIC formula.cpp)
 target_include_directories(formula PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(formula
-    CONAN_PKG::fmt
+    fmt::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost
     CONAN_PKG::nlohmann_json
@@ -33,6 +34,7 @@ target_include_directories(monitor PUBLIC
 target_link_libraries(monitor
     CONAN_PKG::abseil
     CONAN_PKG::boost
+    common
     traceparser
     table
     formula)
@@ -42,7 +44,7 @@ add_executable(cppmon cppmon.cpp)
 target_include_directories(cppmon PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(cppmon
-    CONAN_PKG::fmt
+    fmt::fmt
     CONAN_PKG::abseil
     traceparser
     monitor)

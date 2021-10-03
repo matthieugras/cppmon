@@ -82,14 +82,15 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
   if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&phir->val)) {
     t1 = &ptr->l;
     t2 = &ptr->r;
-  } else if ((ptr = var2::get_if<fo::Formula::eq_t>(&phir->val))) {
+  } else if (const auto *ptr2 = var2::get_if<fo::Formula::less_t>(&phir->val)) {
     cst_type = MAndRel::CST_LESS;
-    t1 = &ptr->l;
-    t2 = &ptr->r;
-  } else if ((ptr = var2::get_if<fo::Formula::eq_t>(&phir->val))) {
+    t1 = &ptr2->l;
+    t2 = &ptr2->r;
+  } else if (const auto *ptr3 =
+               var2::get_if<fo::Formula::less_eq_t>(&phir->val)) {
     cst_type = MAndRel::CST_LESS_EQ;
-    t1 = &ptr->l;
-    t2 = &ptr->r;
+    t1 = &ptr3->l;
+    t2 = &ptr3->r;
   } else {
     throw std::runtime_error("unknown constraint");
   }

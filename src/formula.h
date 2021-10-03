@@ -22,6 +22,10 @@ class MState;
 struct MPred;
 }// namespace monitor::detail
 
+// gen, gen_, conn, conn_, pred_names
+
+class db_gen;
+
 namespace fo {
 namespace {
   namespace var2 = boost::variant2;
@@ -50,6 +54,7 @@ struct Formula;
 struct Term : equality_comparable<Term> {
   friend Formula;
   friend ::monitor::detail::MPred;
+  friend ::db_gen;
   friend class ::monitor::detail::MState;
 
 public:
@@ -134,6 +139,7 @@ private:
 
 struct Formula : equality_comparable<Formula> {
   friend class ::monitor::detail::MState;
+  friend class ::db_gen;
 
 public:
   Formula(const Formula &formula);

@@ -1,6 +1,3 @@
-#include <monitor_driver.h>
+#include <fmt/core.h>
 
-int main() {
-  monitor_driver bla("bla0", "bla1", "bla2");
-  bla.do_monitor();
-}
+int main() { fmt::print("nothing"); }

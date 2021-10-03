@@ -3,14 +3,17 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
+#include <boost/serialization/strong_typedef.hpp>
 #include <charconv>
 #include <event_data.h>
 #include <fmt/core.h>
+#include <fmt/ranges.h>
 #include <iterator>
 #include <lexy/callback.hpp>
 #include <lexy/dsl.hpp>
 #include <string>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -30,11 +33,24 @@ enum arg_types
   FLOAT_TYPE,
   STRING_TYPE
 };
+
 using signature = absl::flat_hash_map<std::string, std::vector<arg_types>>;
+
 using database_tuple = std::vector<common::event_data>;
 using database_elem = absl::flat_hash_set<database_tuple>;
 using database = absl::flat_hash_map<std::string, database_elem>;
 using timestamped_database = std::pair<size_t, database>;
+
+template<typename T>
+class monpoly_fmt {
+  friend struct fmt::formatter<monpoly_fmt<T>>;
+
+public:
+  monpoly_fmt(const T &t) : t(t){};
+
+private:
+  const T &t;
+};
 
 class trace_parser;
 
@@ -109,7 +125,7 @@ private:
     using res_type = var2::variant<std::string_view, std::string>;
     RULE[] {
       auto exp_l = dsl::lit_c<'e'> / dsl::lit_c<'E'>;
-      auto allowed_chars = dsl::digit<> / dsl::period / dsl::lit_c<'-'> /exp_l;
+      auto allowed_chars = dsl::digit<> / dsl::period / dsl::lit_c<'-'> / exp_l;
       return dsl::capture(dsl::while_(allowed_chars));
     }
     ();
@@ -180,7 +196,8 @@ private:
                 const std::string_view *ptr = var2::get_if<0>(&(tup[i]));
 #ifndef NDEBUG
                 if (!ptr)
-                  throw std::runtime_error(fmt::format("expected float or int, got string"));
+                  throw std::runtime_error(
+                    fmt::format("expected float or int, got string"));
 #endif
                 if (ty == INT_TYPE) {
                   int res{};
@@ -257,6 +274,57 @@ private:
 #undef VALUE
 };
 }// namespace parse
+
+
+template<typename T>
+struct [[maybe_unused]] fmt::formatter<
+  parse::monpoly_fmt<T>,
+  std::enable_if_t<
+    any_type_equal_v<T, parse::database_tuple, parse::database_elem,
+                     parse::database, parse::timestamped_database>,
+    char>> {
+
+  constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
+  -> decltype(auto) {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it != '}')
+      throw format_error("invalid format - only empty format strings are "
+                         "accepted for database related types");
+    return it;
+  }
+
+  template<typename FormatContext>
+  auto format [[maybe_unused]] (const parse::monpoly_fmt<T> &arg_wrapper,
+                                FormatContext &ctx) -> decltype(auto) {
+    using parse::monpoly_fmt;
+    const auto &arg = arg_wrapper.t;
+    if constexpr (std::is_same_v<T, parse::database_tuple>) {
+      return fmt::format_to(ctx.out(), "{:m}", fmt::join(arg, ","));
+    } else if constexpr (std::is_same_v<T, parse::database_elem>) {
+      auto curr_end = ctx.out();
+      for (auto it = arg.cbegin(); it != arg.cend(); ) {
+        curr_end = fmt::format_to(curr_end, "{}", monpoly_fmt(*it));
+        if ((++it) != arg.cend())
+          curr_end = fmt::format_to(curr_end, ")(");
+      }
+      return curr_end;
+    } else if constexpr (std::is_same_v<T, parse::database>) {
+      auto curr_end = ctx.out();
+      for (auto it = arg.cbegin(); it != arg.cend();) {
+        curr_end = fmt::format_to(curr_end, "{}({})", it->first,
+                                  monpoly_fmt(it->second));
+        if ((++it) != arg.cend())
+          curr_end = fmt::format_to(curr_end, " ");
+      }
+      return curr_end;
+    } else if constexpr (std::is_same_v<T, parse::timestamped_database>) {
+      return fmt::format_to(ctx.out(), "@{} {};", arg.first,
+                            monpoly_fmt(arg.second));
+    } else {
+      static_assert(always_false_v<T>, "not exhaustive");
+    }
+  }
+};
 
 
 #endif

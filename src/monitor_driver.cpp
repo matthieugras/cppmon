@@ -4,6 +4,7 @@
 #include <monitor_driver.h>
 #include <string>
 #include <traceparser.h>
+#include <util.h>
 
 static void print_satisfactions(const monitor::satisfactions &sats, size_t ts) {
   for (const auto &[tp, tbl] : sats) {
@@ -24,14 +25,7 @@ monitor_driver::monitor_driver(const std::filesystem::path &formula_path,
          fs::is_regular_file(sig_path) && fs::is_regular_file(log_path));
 
   monitor::monitor tmp_mon;
-  signature sig;
-
-  {
-    std::ifstream sig_file(sig_path);
-    std::stringstream buf;
-    buf << sig_file.rdbuf();
-    sig = signature_parser::parse(buf.view());
-  }
+  signature sig = signature_parser::parse(read_file(sig_path));
 
   trace_parser db_parser(std::move(sig));
   std::ifstream log_file(log_path);

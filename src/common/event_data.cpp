@@ -104,6 +104,10 @@ event_data event_data::float_to_int() const {
   return Int(static_cast<int>(var2::get<double>(val)));
 }
 
+const int *event_data::get_if_int() const {
+  return var2::get_if<int>(&val);
+}
+
 event_data event_data::from_json(const json &json_formula) {
   string_view event_ty = json_formula.at(0).get<string_view>();
   if (event_ty == "EInt"sv) {

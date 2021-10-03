@@ -187,6 +187,7 @@ namespace detail {
 
 using detail::monitor;
 using detail::satisfactions;
+using detail::event_table;
 
 }// namespace monitor
 
