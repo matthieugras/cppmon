@@ -18,6 +18,8 @@ namespace {
 }// namespace
 
 class event_data_opt : boost::equality_comparable<event_data_opt> {
+  friend ::fmt::formatter<event_data_opt>;
+
 public:
   event_data_opt() = default;
 
@@ -241,6 +243,38 @@ struct [[maybe_unused]] fmt::formatter<common::event_data> {
       return format_to(ctx.out(),
                        /*presentation == 'n' ? "Str(\"{}\")" :*/ "\"{}\"",
                        *sptr);
+    }
+  }
+};
+
+template<>
+struct [[maybe_unused]] fmt::formatter<common::event_data_opt> {
+  // Presentation format: `n` - normal with constructor, `m` - monpoly database
+  // format
+
+  char presentation = 'n';
+
+  constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
+  -> decltype(ctx.begin()) {
+    auto it = ctx.begin(), end = ctx.end();
+    if (it != end && (*it == 'm'))
+      presentation = *it++;
+    if (it != end && *it != '}')
+      throw format_error(
+        R"(invalid format: ":m" for monpoly, ":n" for normal )");
+    return it;
+  }
+
+  template<typename FormatContext>
+  auto format
+    [[maybe_unused]] (const common::event_data_opt &tab, FormatContext &ctx)
+    -> decltype(ctx.out()) {
+    if (tab.tag == common::event_data_opt::HOLDS_INT) {
+      return format_to(ctx.out(), "{}", tab.i);
+    } else if (tab.tag == common::event_data_opt::HOLDS_FLOAT) {
+      return format_to(ctx.out(), "{:.5f}", tab.d);
+    } else {
+      return format_to(ctx.out(), "\"{}\"", *tab.s);
     }
   }
 };
