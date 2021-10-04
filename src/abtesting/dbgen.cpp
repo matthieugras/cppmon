@@ -9,7 +9,6 @@
 #include <fmt/os.h>
 #include <fmt/ranges.h>
 #include <formula.h>
-#include <iterator>
 #include <monitor.h>
 #include <optional>
 #include <stdexcept>
@@ -25,7 +24,7 @@ ABSL_FLAG(std::string, formula_path, "",
 ABSL_FLAG(std::string, sig_path, "", "filepath for the signature");
 ABSL_FLAG(std::string, out_path, "", "output path for the generated database");
 ABSL_FLAG(size_t, num_satisfactions, 20,
-          "the number of satisfactions to produce");
+          "the minimum number of satisfactions to produce");
 
 namespace {
 namespace var2 = boost::variant2;
@@ -57,13 +56,6 @@ static S set_union(S s1, S s2) {
   return res;
 }
 
-template<typename S>
-static S set_diff(S s1, S s2) {
-  S res = s1;
-  res.erase(s2.cbegin(), s2.cend());
-  return res;
-}
-
 template<typename S, typename T>
 static S set_rm_var(S s, T t) {
   S res = s;
@@ -71,43 +63,22 @@ static S set_rm_var(S s, T t) {
   return res;
 }
 
-template<typename S>
-static auto set_rm_ex(S s) {
-  S res = s;
-  res.erase(0);
-  S res2;
-  for (const auto &r : res)
-    res2.insert(r - 1);
-  return res2;
-}
-
 class db_gen {
 private:
   absl::InsecureBitGen bitgen;
   int curr_var_name{0};
 
-  enum parent_ty
-  {
-    ROOT_TY,
-    NOT_TY,
-    AND_TY,
-    OR_TY,
-    EX_TY
-  };
-
   struct sub_form_info {
-    fo::fv_set gen, gen_, conn, conn_;
     absl::flat_hash_set<fo::name> pred_names;
   };
 
   sub_form_info validate_formula_impl(const Formula &formula,
-                                      const fo::fv_set &all_fvs,
-                                      parent_ty parent) {
+                                      const fo::fv_set &all_fvs) {
     using fo::Formula;
     using std::is_same_v;
     namespace var2 = boost::variant2;
     const auto fvs = formula.fvs();
-    auto visitor = [&fvs, &all_fvs, parent, this](auto &&arg) -> sub_form_info {
+    auto visitor = [&fvs, &all_fvs, this](auto &&arg) -> sub_form_info {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (any_type_equal_v<T, Formula::eq_t, Formula::less_eq_t,
                                      Formula::less_t, Formula::neg_t,
@@ -118,45 +89,24 @@ private:
         if (fvs.empty())
           throw std::runtime_error(fmt::format(
             "formula contains closed predicate with name: {}", arg.pred_name));
-        return sub_form_info{fvs, {}, fvs, {}, {arg.pred_name}};
+        return sub_form_info{{arg.pred_name}};
       } else if constexpr (is_same_v<T, Formula::or_t>) {
-        if (parent == EX_TY)
-          throw std::runtime_error(
-            "formula not srnf because OR has EXISTS parent");
-        if (parent == NOT_TY)
-          throw std::runtime_error(
-            "formula not srnf because OR has NOT parent");
-        auto info_l = validate_formula_impl(*arg.phil, all_fvs, OR_TY),
-             info_r = validate_formula_impl(*arg.phir, all_fvs, OR_TY);
+        auto info_l = validate_formula_impl(*arg.phil, all_fvs),
+             info_r = validate_formula_impl(*arg.phir, all_fvs);
         if (!set_intersect(info_l.pred_names, info_r.pred_names).empty())
           throw std::runtime_error("formula contains repeated predicate names");
-        auto new_gen_ = set_intersect(info_l.gen_, info_r.gen_);
-        return sub_form_info{
-          set_intersect(info_l.gen, info_r.gen), new_gen_,
-          set_intersect(info_l.conn, info_r.conn),
-          set_union(new_gen_, set_intersect(info_l.conn_, info_r.conn_)),
-          set_union(info_l.pred_names, info_r.pred_names)};
+        return sub_form_info{set_union(info_l.pred_names, info_r.pred_names)};
       } else if constexpr (is_same_v<T, Formula::and_t>) {
-        if (parent == NOT_TY)
-          throw std::runtime_error(
-            "formula not srnf because AND has NOT parent");
-        auto info_l = validate_formula_impl(*arg.phil, all_fvs, AND_TY);
+        auto info_l = validate_formula_impl(*arg.phil, all_fvs);
         sub_form_info info_r;
         if (const auto *right_rec = arg.phir->inner_if_neg()) {
-          info_r = validate_formula_impl(*right_rec, all_fvs, NOT_TY);
-          std::swap(info_r.gen, info_r.gen_);
-          std::swap(info_r.conn, info_r.conn_);
+          info_r = validate_formula_impl(*right_rec, all_fvs);
         } else {
-          info_r = validate_formula_impl(*arg.phir, all_fvs, AND_TY);
+          info_r = validate_formula_impl(*arg.phir, all_fvs);
         }
         if (!set_intersect(info_l.pred_names, info_r.pred_names).empty())
           throw std::runtime_error("formula contains repeated predicate names");
-        auto new_gen = set_union(info_l.gen, info_r.gen);
-        return sub_form_info{
-          new_gen, set_intersect(info_l.gen_, info_r.gen_),
-          set_union(new_gen, set_intersect(info_l.conn, info_r.conn)),
-          set_union(info_l.conn_, info_r.conn_),
-          set_union(info_l.pred_names, info_r.pred_names)};
+        return sub_form_info{set_union(info_l.pred_names, info_r.pred_names)};
       } else if constexpr (is_same_v<T, Formula::exists_t>) {
         auto child_fvs = arg.phi->fvs();
         if (!child_fvs.contains(0))
@@ -166,14 +116,8 @@ private:
           throw std::runtime_error(
             "formula not closed because the only free variable in one of the "
             "exists is the bound variable");
-        auto info_sub = validate_formula_impl(*arg.phi, all_fvs, EX_TY);
-        if (!info_sub.conn.contains(0)) {
-          fmt::print("{}\n", info_sub.conn);
-          throw std::runtime_error("con_ex violated");
-        }
-        return sub_form_info{set_rm_ex(info_sub.gen), set_rm_ex(info_sub.gen_),
-                             set_rm_ex(info_sub.conn),
-                             set_rm_ex(info_sub.conn_), info_sub.pred_names};
+        auto info_sub = validate_formula_impl(*arg.phi, all_fvs);
+        return sub_form_info{info_sub.pred_names};
       } else {
         static_assert(always_false_v<T>, "cannot happen");
       }
@@ -232,7 +176,6 @@ private:
 
   simple_tab random_tab(size_t n_cols, size_t n_rows) {
     simple_tab res_tab(n_rows, std::vector<int>(n_cols));
-    size_t num_retries = 0;
     for (size_t i = 0; i < n_rows; ++i) {
       for (size_t j = 0; j < n_cols; ++j) {
         curr_var_name += absl::Uniform<int>(bitgen, 1, 5);
@@ -321,8 +264,7 @@ public:
     return gen_db_impl(formula, tplus, tminus, formula.degree());
   }
   void validate_formula(const Formula &formula) {
-    // TODO: handle sr and check_gfv condition
-    validate_formula_impl(formula, formula.fvs(), ROOT_TY);
+    validate_formula_impl(formula, formula.fvs());
   }
 };
 

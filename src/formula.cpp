@@ -329,6 +329,7 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 Formula Formula::Pred(name pred_name, vector<Term> pred_args) {
   return Formula(pred_t{std::move(pred_name), std::move(pred_args)});
 }
+
 Formula Formula::Eq(Term l, Term r) {
   return Formula(eq_t{std::move(l), std::move(r)});
 }

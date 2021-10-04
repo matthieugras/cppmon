@@ -76,8 +76,8 @@ TEST(Table, Inequality) {
 TEST(Table, Join) {
   {
     table_layout l1 = {1, 2, 3}, l2 = {4, 5, 6}, l3 = {1, 2, 3, 4, 5, 6};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    EXPECT_EQ(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    EXPECT_EQ(info.result_layout, l3);
     auto permutation = id_permutation(6);
     table<int> t1(3, {{5, 6, 7}, {8, 9, 10}}), t2(3, {{10, 20, 30}, {4, 2, 1}}),
       t3(6, {
@@ -86,42 +86,42 @@ TEST(Table, Join) {
               {8, 9, 10, 10, 20, 30},
               {8, 9, 10, 4, 2, 1},
             });
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
   {
     table_layout l1 = {1, 2, 3}, l2 = {2, 5, 6}, l3 = {1, 2, 3, 5, 6};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l3);
     table<int> t1(3, {{5, 6, 7}, {8, 9, 10}}), t2(3, {{10, 20, 30}, {4, 2, 1}}),
       t3(5, {});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
   {
     table_layout l1 = {1, 2, 3}, l2 = {2, 5, 6}, l3 = {1, 2, 3, 5, 6};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l3);
     table<int> t1(3, {{5, 6, 7}, {8, 9, 10}}), t2(3, {{10, 20, 30}, {6, 2, 1}}),
       t3(5, {{5, 6, 7, 2, 1}});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
   {
     table_layout l1 = {6, 2, 3}, l2 = {4, 5, 6}, l3 = {2, 3, 4, 5, 6};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l3);
     table<int> t1(3, {{5, 6, 7}, {5, 9, 10}}),
       t2(3, {{10, 20, 5}, {11, 2, 22}}),
       t3(5, {{6, 7, 10, 20, 5}, {9, 10, 10, 20, 5}});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
   {
     table_layout l1 = {1, 2, 6, 4, 5}, l2 = {3, 2, 5}, l3 = {1, 2, 3, 4, 5, 6};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l3);
     table<int> t1(5, {{1, 2, 3, 4, 5}, {6, 7, 8, 9, 10}, {11, 23, 13, 14, 24}}),
       t2(3, {{16, 2, 5}, {19, 2, 5}, {22, 23, 24}, {25, 26, 27}}),
       t3(6,
          {{1, 2, 16, 4, 5, 3}, {1, 2, 19, 4, 5, 3}, {11, 23, 22, 14, 24, 13}});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
   /*
    * Unit tables always have 0 cols and 1 row, empty tables can have any number
@@ -129,18 +129,18 @@ TEST(Table, Join) {
    */
   {
     table_layout l1 = {3, 1, 2}, l2 = {};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l1);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l1);
     table<int> t1(3, {{5, 6, 7}, {8, 9, 10}, {11, 12, 13}}), t2(0, {{}});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t1, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t1, permutation));
   }
   {
     table_layout l1 = {3, 1, 2}, l2 = {}, l3 = {1, 2, 3};
-    auto [pred_lay, idx1, idx2] = get_join_layout(l1, l2);
-    auto permutation = find_permutation(pred_lay, l3);
+    auto info = get_join_info(l1, l2);
+    auto permutation = find_permutation(info.result_layout, l3);
     table<int> t1(3, {{5, 6, 7}, {8, 9, 10}, {11, 12, 13}}), t2(0, {}),
       t3(3, {});
-    EXPECT_TRUE(t1.natural_join(t2, idx1, idx2).equal_to(t3, permutation));
+    EXPECT_TRUE(t1.natural_join(t2, info).equal_to(t3, permutation));
   }
 }
 
@@ -201,4 +201,37 @@ TEST(Table, Union) {
   }
 }
 
-// TODO: add test cases for anti join
+TEST(Table, AntiJoin) {
+  {
+    table_layout l1 = {1, 2, 3}, l2 = {3}, l3 = {1, 2, 3};
+    auto info = get_anti_join_info(l1, l2);
+    table<int> tab1(3, {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}), tab2(1, {{3}}),
+      tab3(3, {{4, 5, 6}, {7, 8, 9}});
+    EXPECT_EQ(info.result_layout, l3);
+    EXPECT_TRUE(tab1.anti_join(tab2, info).equal_to(tab3, id_permutation(3)));
+    tab1.anti_join_in_place(tab2, info);
+    EXPECT_TRUE(tab1.equal_to(tab3, id_permutation(3)));
+  }
+  {
+    table_layout l1 = {1, 2, 3}, l2 = {3, 1}, l3 = {1, 2, 3};
+    auto info = get_anti_join_info(l1, l2);
+    table<int> tab1(3, {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}),
+      tab2(2, {{9, 7}, {6, 4}}), tab3(3, {{1, 2, 3}});
+    EXPECT_EQ(info.result_layout, l3);
+    EXPECT_TRUE(tab1.anti_join(tab2, info).equal_to(tab3, id_permutation(3)));
+    tab1.anti_join_in_place(tab2, info);
+    EXPECT_TRUE(tab1.equal_to(tab3, id_permutation(3)));
+  }
+  {
+    table_layout l1 = {3, 4, 2, 1}, l2 = {4, 3, 1, 2}, l3 = {3, 4, 2, 1};
+    auto info = get_anti_join_info(l1, l2);
+    table<int> tab1(
+      4, {{1, 2, 3, 10}, {11, 4, 5, 6}, {7, 12, 8, 9}, {13, 14, 15, 16}}),
+      tab2(4, {{4, 11, 6, 5}, {12, 7, 9, 8}}),
+      tab3(4, {{1, 2, 3, 10}, {13, 14, 15, 16}});
+    EXPECT_EQ(info.result_layout, l3);
+    EXPECT_TRUE(tab1.anti_join(tab2, info).equal_to(tab3, id_permutation(4)));
+    tab1.anti_join_in_place(tab2, info);
+    EXPECT_TRUE(tab1.equal_to(tab3, id_permutation(4)));
+  }
+}

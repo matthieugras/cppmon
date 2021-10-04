@@ -5,10 +5,20 @@
 #include <string>
 #include <traceparser.h>
 #include <util.h>
+#include <algorithm>
 
-static void print_satisfactions(const monitor::satisfactions &sats, size_t ts) {
-  for (const auto &[tp, tbl] : sats) {
-    fmt::print("TS: {}, TP: {}, {}\n", ts, tp, tbl);
+static void print_satisfactions(monitor::satisfactions &sats, size_t ts) {
+  for (auto &[tp, tbl] : sats) {
+    std::sort(tbl.begin(), tbl.end());
+    fmt::print("@{}. (time point {}):", ts, tp);
+    if (tbl.empty()) fmt::print(" false\n");
+    else if (tbl.size() == 1 && tbl[0].empty()) fmt::print(" true\n");
+    else {
+      for (const auto &row: tbl) {
+        fmt::print(" ({:m})", fmt::join(row, ","));
+      }
+      fmt::print("\n");
+    }
   }
 }
 
@@ -24,13 +34,16 @@ monitor_driver::monitor_driver(const std::filesystem::path &formula_path,
          fs::exists(log_path) && fs::is_regular_file(formula_path) &&
          fs::is_regular_file(sig_path) && fs::is_regular_file(log_path));
 
-  monitor::monitor tmp_mon;
+  std::string formula_file_content = read_file(formula_path);
+  fo::Formula formula(formula_file_content);
+  monitor::monitor tmp_mon(formula);
   signature sig = signature_parser::parse(read_file(sig_path));
 
   trace_parser db_parser(std::move(sig));
   std::ifstream log_file(log_path);
   log_ = std::move(log_file);
   parser_ = std::move(db_parser);
+  monitor_ = std::move(tmp_mon);
 }
 
 void monitor_driver::do_monitor() {

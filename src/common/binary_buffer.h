@@ -16,7 +16,8 @@ public:
   // After calling this function new_l and new_r will contain garbage
   template<typename F>
   auto update_and_reduce(std::vector<T> &new_l, std::vector<T> &new_r, F f) {
-    using R = std::invoke_result_t<decltype(f), T, T>;
+    using R = std::invoke_result_t<decltype(f), std::add_lvalue_reference_t<T>,
+                                   std::add_lvalue_reference_t<T>>;
     std::vector<R> res;
     auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
          eit2 = new_r.end();

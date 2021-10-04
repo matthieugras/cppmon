@@ -41,12 +41,20 @@ using database_elem = absl::flat_hash_set<database_tuple>;
 using database = absl::flat_hash_map<std::string, database_elem>;
 using timestamped_database = std::pair<size_t, database>;
 
+/*
+class verdict {
+  size_t ts, tp;
+  const database_elem &elem;
+  verdict(size_t ts, size_t tp, const database_elem &elem)
+      : ts(ts), tp(tp), elem(elem){};
+};*/
+
 template<typename T>
 class monpoly_fmt {
   friend struct fmt::formatter<monpoly_fmt<T>>;
 
 public:
-  monpoly_fmt(const T &t) : t(t){};
+  explicit monpoly_fmt(const T &t) : t(t){};
 
 private:
   const T &t;
@@ -302,7 +310,7 @@ struct [[maybe_unused]] fmt::formatter<
       return fmt::format_to(ctx.out(), "{:m}", fmt::join(arg, ","));
     } else if constexpr (std::is_same_v<T, parse::database_elem>) {
       auto curr_end = ctx.out();
-      for (auto it = arg.cbegin(); it != arg.cend(); ) {
+      for (auto it = arg.cbegin(); it != arg.cend();) {
         curr_end = fmt::format_to(curr_end, "{}", monpoly_fmt(*it));
         if ((++it) != arg.cend())
           curr_end = fmt::format_to(curr_end, ")(");

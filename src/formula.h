@@ -22,8 +22,6 @@ class MState;
 struct MPred;
 }// namespace monitor::detail
 
-// gen, gen_, conn, conn_, pred_names
-
 class db_gen;
 
 namespace fo {
@@ -164,6 +162,7 @@ public:
   [[nodiscard]] bool is_constraint() const;
   [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
   [[nodiscard]] bool is_safe_formula() const;
+
 
 private:
   struct pred_t {

@@ -1,6 +1,6 @@
 add_subdirectory(common)
 add_subdirectory(parsing)
-add_subdirectory(dbgenerator)
+add_subdirectory(abtesting)
 
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 

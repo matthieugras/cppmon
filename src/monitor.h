@@ -26,6 +26,7 @@ namespace detail {
   using absl::flat_hash_map;
   using absl::flat_hash_set;
   using boost::container::devector;
+  using common::event_data;
   using std::optional;
   using std::pair;
   using std::string_view;
@@ -42,7 +43,7 @@ namespace detail {
 
   using event_table = table<event_data>;
   using event_table_vec = vector<event_table>;
-  using satisfactions = vector<pair<size_t, event_table>>;
+  using satisfactions = vector<pair<size_t, vector<vector<event_data>>>>;
   using database = parse::database;
   using binary_buffer = common::binary_buffer<event_table>;
   class monitor;
@@ -71,7 +72,7 @@ namespace detail {
                                   const database &db, size_t ts);
 
     MState() = default;
-    MState& operator=(MState &&other) = default;
+    MState &operator=(MState &&other) = default;
 
 
   private:
@@ -82,19 +83,21 @@ namespace detail {
     };
 
     struct MPred {
+      size_t nfvs;
       name pred_name;
       vector<Term> pred_args;
-      size_t n_fvs;
+      vector<vector<size_t>> var_pos;
+      vector<pair<size_t, event_data>> pos_2_cst;
       event_table_vec eval(const database &db, size_t ts);
-      optional<vector<event_data>>
+
+      [[nodiscard]] optional<vector<event_data>>
       match(const vector<event_data> &event_args) const;
     };
 
     struct MAnd {
       binary_buffer buf;
-      vector<size_t> join_idx_l, join_idx_r;
       ptr_type<MState> l_state, r_state;
-      bool is_right_negated;
+      variant<join_info, anti_join_info> op_info;
       event_table_vec eval(const database &db, size_t ts);
     };
 
@@ -128,7 +131,7 @@ namespace detail {
     };
 
     struct MExists {
-      size_t idx_of_bound_var;
+      optional<size_t> drop_idx;
       ptr_type<MState> state;
       event_table_vec eval(const database &db, size_t ts);
     };
@@ -151,21 +154,29 @@ namespace detail {
     struct MSince {};
 
     struct MUntil {};
+
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
                              MAndRel, MAndAssign, MAnd>;
     using init_pair = pair<val_type, table_layout>;
+
     explicit MState(val_type &&state);
     template<typename F>
     static inline std::unique_ptr<MState> uniq(F &&arg) {
       return std::unique_ptr<MState>(new MState(std::forward<F>(arg)));
     }
+
+    static init_pair init_pred_state(const fo::Formula::pred_t &arg);
+
     static init_pair init_eq_state(const fo::Formula::eq_t &arg);
 
     static init_pair init_and_state(const fo::Formula::and_t &arg);
 
-    static init_pair init_and_join_state(const fo::Formula::and_t &arg,
+    static init_pair init_and_join_state(const fo::Formula &phil,
+                                         const fo::Formula &phir,
                                          bool right_negated);
     static init_pair init_and_rel_state(const fo::Formula::and_t &arg);
+
+    static init_pair init_exists_state(const fo::Formula::exists_t &arg);
 
     static init_pair init_mstate(const Formula &formula);
     val_type state;
@@ -179,15 +190,15 @@ namespace detail {
 
   private:
     MState state;
-    table_layout res_layout;
+    vector<size_t> output_var_permutation;
     size_t curr_tp{};
   };
 
 }// namespace detail
 
+using detail::event_table;
 using detail::monitor;
 using detail::satisfactions;
-using detail::event_table;
 
 }// namespace monitor
 

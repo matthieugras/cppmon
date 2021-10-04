@@ -104,9 +104,7 @@ event_data event_data::float_to_int() const {
   return Int(static_cast<int>(var2::get<double>(val)));
 }
 
-const int *event_data::get_if_int() const {
-  return var2::get_if<int>(&val);
-}
+const int *event_data::get_if_int() const { return var2::get_if<int>(&val); }
 
 event_data event_data::from_json(const json &json_formula) {
   string_view event_ty = json_formula.at(0).get<string_view>();
@@ -116,6 +114,118 @@ event_data event_data::from_json(const json &json_formula) {
     return event_data::Float(json_formula.at(1).get<double>());
   } else if (event_ty == "EString"sv) {
     return event_data::String(json_formula.at(1).get<string>());
+  } else {
+    throw std::runtime_error("invalid event_data json");
+  }
+}
+
+// event_data_opt
+bool event_data_opt::operator==(const event_data_opt &other) const {
+  if (tag != other.tag)
+    return false;
+  if (tag == HOLDS_INT) {
+    return i == other.i;
+  } else if (tag == HOLDS_FLOAT) {
+    return d == other.d;
+  } else {
+    return *s == *other.s;
+  }
+}
+
+bool event_data_opt::operator<=(const event_data_opt &other) const {
+
+  if (tag == HOLDS_INT) {
+    if (other.tag == HOLDS_INT)
+      return i <= other.i;
+    else if (other.tag == HOLDS_FLOAT)
+      return static_cast<double>(i) <= other.d;
+    else
+      return false;
+  } else if (tag == HOLDS_FLOAT) {
+    if (other.tag == HOLDS_INT)
+      return d <= static_cast<double>(other.i);
+    else if (other.tag == HOLDS_FLOAT)
+      return d <= other.d;
+    else
+      return false;
+  } else {
+    if (other.tag == HOLDS_INT || other.tag == HOLDS_FLOAT)
+      return false;
+    else
+      return *s <= *other.s;
+  }
+}
+
+bool event_data_opt::operator<(const event_data_opt &other) const {
+  return *this <= other && !(other <= *this);
+}
+
+event_data_opt event_data_opt::operator+(const event_data_opt &other) const {
+  auto op = [](auto l, auto r) { return l + r; };
+  return apply_arith_bin_op(op, *this, other);
+}
+
+event_data_opt event_data_opt::operator-(const event_data_opt &other) const {
+  auto op = [](auto l, auto r) { return l - r; };
+  return apply_arith_bin_op(op, *this, other);
+}
+
+event_data_opt event_data_opt::operator*(const event_data_opt &other) const {
+  auto op = [](auto l, auto r) { return l * r; };
+  return apply_arith_bin_op(op, *this, other);
+}
+
+event_data_opt event_data_opt::operator/(const event_data_opt &other) const {
+  auto op = [](auto l, auto r) { return l / r; };
+  return apply_arith_bin_op(op, *this, other);
+}
+
+event_data_opt event_data_opt::operator%(const event_data_opt &other) const {
+  if (tag == HOLDS_INT && other.tag == HOLDS_INT)
+    return Int(i % other.i);
+  else
+    return nan();
+}
+
+event_data_opt event_data_opt::operator-() const {
+  if (tag == HOLDS_INT) {
+    return Int(-i);
+  } else if (tag == HOLDS_FLOAT) {
+    return Float(-d);
+  } else {
+    return nan();
+  }
+}
+
+event_data_opt event_data_opt::nan() {
+  return Float(std::numeric_limits<double>::quiet_NaN());
+}
+
+event_data_opt event_data_opt::int_to_float() const {
+  assert(tag == HOLDS_INT);
+  return Float(i);
+}
+
+event_data_opt event_data_opt::float_to_int() const {
+  assert(tag == HOLDS_FLOAT);
+  return Int(static_cast<int>(d));
+}
+
+const int *event_data_opt::get_if_int() const {
+  if (tag == HOLDS_INT)
+    return &i;
+  else
+    return nullptr;
+}
+
+event_data_opt event_data_opt::from_json(const json &json_formula) {
+  string_view event_ty = json_formula.at(0).get<string_view>();
+  if (event_ty == "EInt"sv) {
+    return Int(json_formula.at(1).get<int>());
+  } else if (event_ty == "EFloat"sv) {
+    return Float(json_formula.at(1).get<double>());
+  } else if (event_ty == "EString"sv) {
+    return String(json_formula.at(1).get<string>());
   } else {
     throw std::runtime_error("invalid event_data json");
   }
