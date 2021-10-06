@@ -4,9 +4,9 @@
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
-#include <binary_buffer.h>
 #include <boost/container/devector.hpp>
 #include <boost/variant2/variant.hpp>
+#include <buffers.h>
 #include <event_data.h>
 #include <formula.h>
 #include <iterator>
@@ -136,19 +136,24 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
+
     struct MPrev {
       Interval inter;
-      bool is_first;
-      event_table_vec past_data;
-      vector<size_t> past_ts;
+      size_t num_fvs;
+      event_table buf;
+      devector<size_t> past_ts;
       ptr_type<MState> state;
+      bool is_first;
+      event_table_vec eval(const database &db, size_t ts);
     };
 
     struct MNext {
       Interval inter;
-      bool is_first;
-      vector<size_t> past_ts;
+      size_t num_fvs;
+      devector<size_t> past_ts;
       ptr_type<MState> state;
+      bool is_first;
+      event_table_vec eval(const database &db, size_t ts);
     };
 
     struct MSince {};
@@ -177,6 +182,10 @@ namespace detail {
     static init_pair init_and_rel_state(const fo::Formula::and_t &arg);
 
     static init_pair init_exists_state(const fo::Formula::exists_t &arg);
+
+    static init_pair init_next_state(const fo::Formula::next_t &arg);
+
+    static init_pair init_prev_state(const fo::Formula::prev_t &arg);
 
     static init_pair init_mstate(const Formula &formula);
     val_type state;

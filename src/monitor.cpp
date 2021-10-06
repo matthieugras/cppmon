@@ -38,7 +38,7 @@ event_table_vec MState::eval(const database &db, size_t ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
-                                   MOr>) {
+                                   MOr, MNext, MPrev>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -170,6 +170,24 @@ MState::init_pair MState::init_exists_state(const fo::Formula::exists_t &arg) {
   return {MExists{drop_idx, uniq(std::move(rec_state))}, this_layout};
 }
 
+MState::init_pair MState::init_next_state(const fo::Formula::next_t &arg) {
+  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
+  return {
+    MNext{arg.inter, rec_layout.size(), {}, uniq(std::move(rec_state)), true},
+    rec_layout};
+}
+
+MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
+  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
+  return {MPrev{arg.inter,
+                rec_layout.size(),
+                event_table(),
+                {},
+                uniq(std::move(rec_state)),
+                true},
+          rec_layout};
+}
+
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -201,9 +219,9 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       auto rec_state = init_exists_state(arg);
       return rec_state;
     } else if constexpr (is_same_v<T, fo::Formula::prev_t>) {
-      throw not_implemented_error();
+      return init_prev_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
-      throw not_implemented_error();
+      return init_next_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::since_t>) {
       throw not_implemented_error();
     } else if constexpr (is_same_v<T, fo::Formula::until_t>) {
@@ -318,6 +336,62 @@ event_table_vec MState::MAndRel::eval(const database &db, size_t ts) {
   std::transform(
     rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res_tabs),
     [filter_fn](const auto &tab) { return tab.filter(filter_fn); });
+  return res_tabs;
+}
+
+event_table_vec MState::MPrev::eval(const database &db, size_t ts) {
+  auto rec_tabs = state->eval(db, ts);
+  past_ts.push_back(ts);
+  if (rec_tabs.empty())
+    return rec_tabs;
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size() + 1);
+  auto tabs_it = rec_tabs.begin();
+  if (is_first) {
+    buf = std::move(*tabs_it);
+    tabs_it++;
+    res_tabs.push_back(event_table(num_fvs));
+    is_first = false;
+  }
+
+  if (tabs_it == rec_tabs.end())
+    return res_tabs;
+
+  assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
+  if (inter.contains(past_ts[1] - past_ts[0]))
+    res_tabs.push_back(std::move(buf));
+
+  for (; (tabs_it + 1) < rec_tabs.end(); past_ts.pop_front(), ++tabs_it) {
+    assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
+    if (inter.contains(past_ts[1] - past_ts[0]))
+      res_tabs.push_back(*tabs_it);
+    else
+      res_tabs.push_back(event_table(num_fvs));
+  }
+  buf = std::move(*tabs_it);
+  return res_tabs;
+}
+
+event_table_vec MState::MNext::eval(const database &db, size_t ts) {
+  auto rec_tabs = state->eval(db, ts);
+  past_ts.push_back(ts);
+  if (rec_tabs.empty())
+    return rec_tabs;
+  auto tabs_it = rec_tabs.begin();
+  if (is_first) {
+    tabs_it++;
+    is_first = false;
+  }
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size());
+  for (; tabs_it != rec_tabs.end(); past_ts.pop_front(), ++tabs_it) {
+    assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
+    if (inter.contains(past_ts[1] - past_ts[0]))
+      res_tabs.push_back(std::move(*tabs_it));
+    else
+      res_tabs.push_back(event_table(num_fvs));
+  }
+  assert(!past_ts.empty() && tabs_it == rec_tabs.end());
   return res_tabs;
 }
 

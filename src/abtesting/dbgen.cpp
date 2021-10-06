@@ -134,10 +134,10 @@ private:
       ev_dat.push_back(event_data::Int(d));
     if (it == db.end()) {
       auto new_db_elem = database_elem();
-      new_db_elem.insert(std::move(ev_dat));
+      new_db_elem.push_back(std::move(ev_dat));
       db.insert(std::pair(pred_name, std::move(new_db_elem)));
     } else {
-      it->second.insert(std::move(ev_dat));
+      it->second.push_back(std::move(ev_dat));
     }
   }
 
@@ -147,7 +147,8 @@ private:
       if (it == db1.end()) {
         db1.insert(std::pair(pred_name, std::move(db_elem)));
       } else {
-        it->second.insert(std::make_move_iterator(db_elem.begin()),
+        it->second.insert(db_elem.end(),
+                          std::make_move_iterator(db_elem.begin()),
                           std::make_move_iterator(db_elem.end()));
       }
     }

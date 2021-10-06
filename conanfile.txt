@@ -13,3 +13,4 @@ cmake
 [options]
 boost:without_locale=True
 boost:without_stacktrace=True
+jemalloc:enable_prof=True

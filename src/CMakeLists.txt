@@ -43,6 +43,12 @@ target_link_libraries(monitor
 add_executable(cppmon cppmon.cpp)
 target_include_directories(cppmon PUBLIC
     ${MAIN_INCLUDES})
+
+if (USE_JEMALLOC)
+  target_link_libraries(cppmon
+      CONAN_PKG::jemalloc)
+endif ()
+
 target_link_libraries(cppmon
     fmt::fmt
     CONAN_PKG::abseil

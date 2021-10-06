@@ -2,7 +2,6 @@
 #define TRACEPARSER_H
 
 #include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 #include <boost/serialization/strong_typedef.hpp>
 #include <charconv>
 #include <event_data.h>
@@ -37,17 +36,9 @@ enum arg_types
 using signature = absl::flat_hash_map<std::string, std::vector<arg_types>>;
 
 using database_tuple = std::vector<common::event_data>;
-using database_elem = absl::flat_hash_set<database_tuple>;
+using database_elem = std::vector<database_tuple>;
 using database = absl::flat_hash_map<std::string, database_elem>;
 using timestamped_database = std::pair<size_t, database>;
-
-/*
-class verdict {
-  size_t ts, tp;
-  const database_elem &elem;
-  verdict(size_t ts, size_t tp, const database_elem &elem)
-      : ts(ts), tp(tp), elem(elem){};
-};*/
 
 template<typename T>
 class monpoly_fmt {
@@ -172,8 +163,7 @@ private:
 
   struct named_arg_tup_list {
     using res_type =
-      std::pair<signature_parser::pred_name::res_type,
-                absl::flat_hash_set<std::vector<common::event_data>>>;
+      std::pair<signature_parser::pred_name::res_type, database_elem>;
     RULE dsl::p<signature_parser::pred_name> + dsl::p<arg_tuple_list>;
     static constexpr auto cb = lexy::callback<res_type>(
       [](std::string &&pred_name, typename arg_tuple_list::res_type &&pred_args,
@@ -183,7 +173,7 @@ private:
           throw std::runtime_error(
             fmt::format("unknown predicate {}", pred_name));
         }
-        absl::flat_hash_set<std::vector<common::event_data>> res_set;
+        database_elem res_set;
         res_set.reserve(pred_args.size());
         const auto &tys = it->second;
         size_t n1 = tys.size();
@@ -243,7 +233,7 @@ private:
               }
             }
           }
-          res_set.insert(std::move(res_vec));
+          res_set.push_back(std::move(res_vec));
         }
         return std::make_pair(std::move(pred_name), std::move(res_set));
       });
@@ -259,7 +249,8 @@ private:
       if (it == db.end())
         db.insert(std::move(elem));
       else
-        it->second.insert(std::make_move_iterator(elem.second.begin()),
+        it->second.insert(it->second.end(),
+                          std::make_move_iterator(elem.second.begin()),
                           std::make_move_iterator(elem.second.end()));
     };
     VALUE

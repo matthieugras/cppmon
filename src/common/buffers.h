@@ -1,5 +1,5 @@
-#ifndef CPPMON_BINARY_BUFFER_H
-#define CPPMON_BINARY_BUFFER_H
+#ifndef CPPMON_BUFFERS_H
+#define CPPMON_BUFFERS_H
 
 #include <boost/container/devector.hpp>
 #include <iterator>
@@ -55,4 +55,4 @@ private:
 }// namespace common
 
 
-#endif// CPPMON_BINARY_BUFFER_H
+#endif// CPPMON_BUFFERS_H
