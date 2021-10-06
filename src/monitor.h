@@ -15,6 +15,7 @@
 #include <string_view>
 #include <table.h>
 #include <traceparser.h>
+#include <tuple>
 #include <type_traits>
 #include <util.h>
 #include <variant>
@@ -43,7 +44,9 @@ namespace detail {
 
   using event_table = table<event_data>;
   using event_table_vec = vector<event_table>;
-  using satisfactions = vector<pair<size_t, vector<vector<event_data>>>>;
+  // (ts, tp, data)
+  using satisfactions =
+    vector<std::tuple<size_t, size_t, vector<vector<event_data>>>>;
   using database = parse::database;
   using binary_buffer = common::binary_buffer<event_table>;
   class monitor;
@@ -198,9 +201,11 @@ namespace detail {
     satisfactions step(const database &db, size_t ts);
 
   private:
-    MState state;
-    vector<size_t> output_var_permutation;
-    size_t curr_tp{};
+    MState state_;
+    vector<size_t> output_var_permutation_;
+    absl::flat_hash_map<size_t, size_t> tp_ts_map_;
+    size_t curr_tp_{};
+    size_t max_tp_{};
   };
 
 }// namespace detail

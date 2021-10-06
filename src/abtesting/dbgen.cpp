@@ -25,6 +25,8 @@ ABSL_FLAG(std::string, sig_path, "", "filepath for the signature");
 ABSL_FLAG(std::string, out_path, "", "output path for the generated database");
 ABSL_FLAG(size_t, num_satisfactions, 20,
           "the minimum number of satisfactions to produce");
+ABSL_FLAG(size_t, num_tp, 1, "number of time points");
+ABSL_FLAG(size_t, tp_per_ts, 1, "time points per timestamp");
 
 namespace {
 namespace var2 = boost::variant2;
@@ -67,6 +69,7 @@ class db_gen {
 private:
   absl::InsecureBitGen bitgen;
   int curr_var_name{0};
+  absl::flat_hash_map<std::string, database> next_bufs;
 
   struct sub_form_info {
     absl::flat_hash_set<fo::name> pred_names;
@@ -82,9 +85,11 @@ private:
       using T = std::decay_t<decltype(arg)>;
       if constexpr (any_type_equal_v<T, Formula::eq_t, Formula::less_eq_t,
                                      Formula::less_t, Formula::neg_t,
-                                     Formula::prev_t, Formula::next_t,
-                                     Formula::since_t, Formula::until_t>) {
+                                     Formula::since_t, Formula::until_t,
+                                     Formula::prev_t>) {
         throw std::runtime_error("unsupported fragment");
+      } else if constexpr (any_type_equal_v<T, Formula::next_t>) {
+        return validate_formula_impl(*arg.phi, all_fvs);
       } else if constexpr (is_same_v<T, Formula::pred_t>) {
         if (fvs.empty())
           throw std::runtime_error(fmt::format(
@@ -147,7 +152,7 @@ private:
       if (it == db1.end()) {
         db1.insert(std::pair(pred_name, std::move(db_elem)));
       } else {
-        it->second.insert(db_elem.end(),
+        it->second.insert(it->second.end(),
                           std::make_move_iterator(db_elem.begin()),
                           std::make_move_iterator(db_elem.end()));
       }
@@ -187,7 +192,7 @@ private:
   }
 
   database gen_db_impl(const Formula &formula, simple_tab pos, simple_tab neg,
-                       size_t nfvs) {
+                       size_t nfvs, std::string prefix) {
     auto visitor = [&, nfvs](auto &&arg) -> database {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (any_type_equal_v<T, Formula::or_t, Formula::and_t>) {
@@ -200,19 +205,19 @@ private:
         database ldb, rdb;
         if constexpr (std::is_same_v<T, Formula::or_t>) {
           ldb = gen_db_impl(*arg.phil, tab_union(pos, t1), tab_union(neg, t2),
-                            nfvs);
+                            nfvs, prefix + "orl");
           rdb = gen_db_impl(*arg.phir, tab_union(t1, t2), tab_union(neg, pos),
-                            nfvs);
+                            nfvs, prefix + "orr");
         } else {
           ldb = gen_db_impl(*arg.phil, tab_union(pos, neg), tab_union(t1, t2),
-                            nfvs);
+                            nfvs, prefix + "andl");
 
           if (const auto *const neg_ptr = arg.phir->inner_if_neg()) {
             rdb = gen_db_impl(*neg_ptr, tab_union(neg, t1), tab_union(pos, t2),
-                              nfvs);
+                              nfvs, prefix + "andr");
           } else {
             rdb = gen_db_impl(*arg.phir, tab_union(pos, t2), tab_union(neg, t1),
-                              nfvs);
+                              nfvs, prefix + "andrneg");
           }
         }
         destructive_merge(ldb, std::move(rdb));
@@ -222,7 +227,7 @@ private:
         auto tminus = random_tab(1, neg.size());
         auto new_pos = prepend_col(pos, *tplus.begin());
         auto new_neg = prepend_col(neg, *tminus.begin());
-        return gen_db_impl(*arg.phi, new_pos, new_neg, nfvs + 1);
+        return gen_db_impl(*arg.phi, new_pos, new_neg, nfvs + 1, prefix + "ex");
       } else if constexpr (std::is_same_v<T, Formula::pred_t>) {
         /*fmt::print("before call to pred (for {}):\npos: {}\nneg: {}\n\n",
                    arg.pred_name, pos, neg);*/
@@ -244,6 +249,11 @@ private:
           update_or_insert(res_db, arg.pred_name, assignment);
         }
         return res_db;
+      } else if constexpr (any_type_equal_v<T, Formula::next_t>) {
+        //fmt::print("prefix is {}", prefix);
+        database rec_db = gen_db_impl(*arg.phi, pos, neg, nfvs, prefix + "nxt");
+        std::swap(next_bufs[prefix], rec_db);
+        return rec_db;
       } else {
         throw std::runtime_error("unsupported fragment");
       }
@@ -254,7 +264,6 @@ private:
 
 public:
   database generate_database(const Formula &formula, size_t num_tups) {
-    curr_var_name = 0;
     size_t num_fvs = formula.degree();
     auto tplus = random_tab(num_fvs, num_tups);
     auto tminus = random_tab(num_fvs, num_tups);
@@ -262,7 +271,7 @@ public:
                tminus);*/
     /*fmt::print("num_fvs is: {}\nT+ is: {}\nT- is: {}\n", num_fvs, tplus,
                tminus);*/
-    return gen_db_impl(formula, tplus, tminus, formula.degree());
+    return gen_db_impl(formula, tplus, tminus, formula.degree(), "");
   }
   void validate_formula(const Formula &formula) {
     validate_formula_impl(formula, formula.fvs());
@@ -284,9 +293,13 @@ int main(int argc, char *argv[]) {
     fs::remove(opath);
   auto db_gen_obj = db_gen();
   db_gen_obj.validate_formula(formula);
-  auto db = db_gen_obj.generate_database(formula, num_tups);
+  size_t tp_per_ts = absl::GetFlag(FLAGS_tp_per_ts);
+  size_t num_tp = absl::GetFlag(FLAGS_num_tp);
   auto f = fmt::output_file(opath.string());
-  f.print("{}\n", parse::monpoly_fmt<parse::timestamped_database>(
-                    std::pair(0, std::move(db))));
-  f.flush();
+  for (size_t tp = 0; tp < num_tp; ++tp) {
+    size_t curr_ts = tp / tp_per_ts;
+    auto db = db_gen_obj.generate_database(formula, num_tups);
+    f.print("{}\n", parse::monpoly_fmt<parse::timestamped_database>(
+                      std::pair(curr_ts, std::move(db))));
+  }
 }

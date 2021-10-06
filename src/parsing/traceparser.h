@@ -265,9 +265,15 @@ private:
 
   struct ts_db_parse {
     RULE dsl::at_sign + dsl::p<ts_parse> + dsl::ascii::blank +
-      dsl::p<db_parse> + dsl::semicolon +
-      dsl::if_(dsl::ascii::newline) + dsl::eof;
-    VALUE lexy::construct<timestamped_database>;
+      dsl::opt(dsl::peek_not(dsl::semicolon) >> dsl::p<db_parse>) +
+      dsl::semicolon + dsl::if_(dsl::ascii::newline) + dsl::eof;
+    VALUE lexy::callback<timestamped_database>(
+      [](size_t &&ts, std::optional<database> &&db) -> timestamped_database {
+        if (db)
+          return std::make_pair(ts, std::move(*db));
+        else
+          return std::make_pair(ts, database());
+      });
   };
 #undef RULE
 #undef VALUE

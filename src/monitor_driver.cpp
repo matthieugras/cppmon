@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
 #include <monitor.h>
@@ -5,16 +6,17 @@
 #include <string>
 #include <traceparser.h>
 #include <util.h>
-#include <algorithm>
 
-static void print_satisfactions(monitor::satisfactions &sats, size_t ts) {
-  for (auto &[tp, tbl] : sats) {
+static void print_satisfactions(monitor::satisfactions &sats) {
+  for (auto &[ts, tp, tbl] : sats) {
+    if (tbl.empty())
+      continue;
     std::sort(tbl.begin(), tbl.end());
     fmt::print("@{}. (time point {}):", ts, tp);
-    if (tbl.empty()) fmt::print(" false\n");
-    else if (tbl.size() == 1 && tbl[0].empty()) fmt::print(" true\n");
+    if (tbl.size() == 1 && tbl[0].empty())
+      fmt::print(" true\n");
     else {
-      for (const auto &row: tbl) {
+      for (const auto &row : tbl) {
         fmt::print(" ({:m})", fmt::join(row, ","));
       }
       fmt::print("\n");
@@ -52,6 +54,6 @@ void monitor_driver::do_monitor() {
   while (std::getline(log_, db_str)) {
     auto [ts, db] = parser_.parse_database(db_str);
     auto sats = monitor_.step(db, ts);
-    print_satisfactions(sats, ts);
+    print_satisfactions(sats);
   }
 }

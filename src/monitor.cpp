@@ -2,7 +2,7 @@
 
 namespace monitor::detail {
 // Monitor methods
-monitor::monitor(const Formula &formula) : curr_tp(0) {
+monitor::monitor(const Formula &formula) : curr_tp_(0) {
   auto [state_tmp, layout_tmp] = MState::init_mstate(formula);
 #ifndef NDEBUG
   fo::fv_set layout_fvs;
@@ -12,22 +12,27 @@ monitor::monitor(const Formula &formula) : curr_tp(0) {
   }
   assert(layout_fvs == formula.fvs());
 #endif
-  state = MState(std::move(state_tmp));
-  output_var_permutation =
+  state_ = MState(std::move(state_tmp));
+  output_var_permutation_ =
     find_permutation(id_permutation(layout_tmp.size()), layout_tmp);
 }
 
 satisfactions monitor::step(const database &db, size_t ts) {
-  auto sats = state.eval(db, ts);
+  tp_ts_map_.emplace(max_tp_, ts);
+  max_tp_++;
+  auto sats = state_.eval(db, ts);
   satisfactions transformed_sats;
   transformed_sats.reserve(sats.size());
-  size_t new_curr_tp = curr_tp;
+  size_t new_curr_tp = curr_tp_;
   size_t n = sats.size();
   for (size_t i = 0; i < n; ++i, ++new_curr_tp) {
-    auto output_tab = sats[i].make_verdicts(output_var_permutation);
-    transformed_sats.emplace_back(new_curr_tp, std::move(output_tab));
+    auto output_tab = sats[i].make_verdicts(output_var_permutation_);
+    auto it = tp_ts_map_.find(new_curr_tp);
+    transformed_sats.emplace_back(it->second, new_curr_tp,
+                                  std::move(output_tab));
+    tp_ts_map_.erase(it);
   }
-  curr_tp = new_curr_tp;
+  curr_tp_ = new_curr_tp;
   return transformed_sats;
 }
 
