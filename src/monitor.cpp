@@ -400,4 +400,24 @@ event_table_vec MState::MNext::eval(const database &db, size_t ts) {
   return res_tabs;
 }
 
+event_table_vec MState::MSince::eval(const database &db, size_t ts) {
+
+}
+
+void MState::MSince::add_new_ts(size_t ts) {
+
+}
+
+void MState::MSince::join(event_table tab_l) {
+
+}
+
+void MState::MSince::add_new_table(event_table tab_r) {
+
+}
+
+event_table_vec MState::MSince::produce_result() {
+
+}
+
 }// namespace monitor::detail

@@ -159,7 +159,18 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
-    struct MSince {};
+    struct MSince {
+      table_layout layout_l, layout_r;
+      devector<std::pair<size_t, event_table>> data_prev, data_in;
+      absl::flat_hash_map<vector<event_data>, size_t> tuple_since, tuple_in;
+      binary_buffer buf;
+
+      event_table_vec eval(const database &db, size_t ts);
+      void add_new_ts(size_t ts);
+      void join(event_table tab_l);
+      void add_new_table(event_table tab_r);
+      event_table_vec produce_result();
+    };
 
     struct MUntil {};
 

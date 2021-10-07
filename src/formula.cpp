@@ -234,8 +234,18 @@ fv_set Term::fvi(size_t num_bound_vars) const {
 fv_set Term::fvs() const { return fvi(0); }
 
 // Formula member functions
-Formula::Formula(const Formula &formula) : val(copy_val(formula.val)) {}
-Formula::Formula(Formula &&formula) noexcept : val(std::move(formula.val)) {}
+size_t Formula::formula_id_counter = 0;
+
+size_t Formula::unique_id() const { return formula_id_; }
+
+Formula::Formula(const Formula &formula)
+    : formula_id_(formula_id_counter), val(copy_val(formula.val)) {
+  formula_id_counter++;
+}
+Formula::Formula(Formula &&formula) noexcept
+    : formula_id_(formula_id_counter), val(std::move(formula.val)) {
+  formula_id_counter++;
+}
 Formula::Formula(string_view json_formula)
     : Formula(Formula::from_json(json::parse(json_formula))) {}
 
@@ -322,7 +332,10 @@ Formula Formula::from_json(const json &json_formula) {
   }
 }
 
-Formula::Formula(val_type &&val) noexcept : val(std::move(val)) {}
+Formula::Formula(val_type &&val) noexcept
+    : formula_id_(formula_id_counter), val(std::move(val)) {
+  formula_id_counter++;
+}
 
 Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 

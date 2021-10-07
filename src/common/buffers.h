@@ -4,6 +4,7 @@
 #include <boost/container/devector.hpp>
 #include <iterator>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace common {

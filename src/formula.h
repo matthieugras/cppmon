@@ -142,6 +142,7 @@ struct Formula : equality_comparable<Formula> {
 public:
   Formula(const Formula &formula);
   Formula(Formula &&formula) noexcept;
+  size_t unique_id() const;
   bool operator==(const Formula &other) const;
   explicit Formula(std::string_view json_formula);
   static Formula Pred(name pred_name, vector<Term> pred_args);
@@ -165,6 +166,8 @@ public:
 
 
 private:
+  static size_t formula_id_counter;
+
   struct pred_t {
     name pred_name;
     vector<Term> pred_args;
@@ -228,6 +231,7 @@ private:
   static inline std::unique_ptr<Formula> uniq(F &&arg) {
     return std::unique_ptr<Formula>(new Formula(std::forward<F>(arg)));
   }
+  size_t formula_id_;
   val_type val;
 };
 
