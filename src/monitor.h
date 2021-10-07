@@ -51,12 +51,6 @@ namespace detail {
   using binary_buffer = common::binary_buffer<event_table>;
   class monitor;
 
-  // TODO: implement this later together with meval
-  struct MSaux {};
-
-  // TODO: implement this later together with meval
-  struct MUaux {};
-
   template<typename F, typename T>
   event_table_vec apply_recursive_bin_reduction(F f, T &t1, T &t2,
                                                 binary_buffer &buf,
@@ -160,16 +154,20 @@ namespace detail {
     };
 
     struct MSince {
-      table_layout layout_l, layout_r;
+
+      vector<size_t> comm_idx_l, comm_idx_r;
+      ptr_type<MState> l_state, r_state;
+      Interval inter;
       devector<std::pair<size_t, event_table>> data_prev, data_in;
       absl::flat_hash_map<vector<event_data>, size_t> tuple_since, tuple_in;
       binary_buffer buf;
+      devector<size_t> ts_buf;
 
       event_table_vec eval(const database &db, size_t ts);
       void add_new_ts(size_t ts);
-      void join(event_table tab_l);
+      void join(event_table &tab_l);
       void add_new_table(event_table tab_r);
-      event_table_vec produce_result();
+      event_table produce_result();
     };
 
     struct MUntil {};

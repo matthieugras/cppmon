@@ -401,23 +401,51 @@ event_table_vec MState::MNext::eval(const database &db, size_t ts) {
 }
 
 event_table_vec MState::MSince::eval(const database &db, size_t ts) {
-
+  ts_buf.push_back(ts);
+  auto reduction_fn = [this](event_table &tab_l,
+                             event_table &tab_r) -> event_table {
+    assert(!ts_buf.empty());
+    size_t new_ts = ts_buf.front();
+    ts_buf.pop_front();
+    add_new_ts(new_ts);
+    join(tab_l);
+    add_new_table(std::move(tab_r));
+    return produce_result();
+  };
+  return apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state, buf,
+                                       db, ts);
 }
 
 void MState::MSince::add_new_ts(size_t ts) {
+  for (; !data_in.empty() && !inter.contains(data_in.back().first - ts);
+       data_in.pop_back()) {}
+  absl::erase_if(tuple_in, [this, ts](const auto &entry) {
+    size_t entry_ts = entry.second;
+    assert(entry_ts >= ts);
+    return !inter.contains(entry_ts - ts);
+  });
+  while (!data_prev.empty()) {
+    auto &latest = data_prev.back();
+    size_t latest_ts = latest.first;
+    assert(latest.first >= ts);
+    if (!inter.contains(latest_ts - ts))
+      break;
+    for (const auto &row : latest.second) {
+      auto since_it = tuple_since.find(row);
+      if (since_it != tuple_since.end() && since_it->second <= latest_ts)
+        tuple_in.insert_or_assign(row, latest_ts);
+    }
+    data_in.push_front(std::move(latest));
+    data_prev.pop_back();
+  }
+}
+
+void MState::MSince::join(event_table &tab_l) {
 
 }
 
-void MState::MSince::join(event_table tab_l) {
+void MState::MSince::add_new_table(event_table tab_r) {}
 
-}
-
-void MState::MSince::add_new_table(event_table tab_r) {
-
-}
-
-event_table_vec MState::MSince::produce_result() {
-
-}
+event_table MState::MSince::produce_result() {}
 
 }// namespace monitor::detail

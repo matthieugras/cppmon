@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <util.h>
+#include <absl/base/optimization.h>
 
 namespace common {
 namespace {

@@ -66,6 +66,43 @@ class table {
   friend struct fmt::formatter<table<T>>;
 
 public:
+  // Forward the iterators of the raw hashset
+  using iterator = typename flat_hash_set<vector<T>>::iterator;
+  using const_iterator = typename flat_hash_set<vector<T>>::const_iterator;
+  using data_t = flat_hash_set<vector<T>>;
+  using data_t_ptr = typename data_t::const_pointer;
+  using join_hash_map = flat_hash_map<vector<T>, vector<data_t_ptr>>;
+  using join_hash_set = flat_hash_set<vector<T>>;
+
+  static join_hash_map compute_join_hash_map(const table<T> &tab,
+                                             const vector<size_t> &idxs) {
+    join_hash_map res{};
+    res.reserve(tab.data_.size());
+    for (const auto &row : tab.data_) {
+      auto col_vals = filter_row(idxs, row);
+      res[col_vals].push_back(&row);
+    }
+    return res;
+  }
+
+  static join_hash_set compute_join_hash_set(const table<T> &tab,
+                                             const vector<size_t> &idxs) {
+    join_hash_set res{};
+    res.reserve(tab.data_.size());
+    for (const auto &row : tab.data_) {
+      auto col_vals = filter_row(idxs, row);
+      res.insert(std::move(col_vals));
+    }
+    return res;
+  }
+
+  iterator begin() { return data_.begin(); }
+  iterator end() { return data_.end(); }
+  const_iterator begin() const { return data_.begin(); }
+  const_iterator end() const { return data_.end(); }
+  const_iterator cbegin() const { return data_.cbegin(); }
+  const_iterator cend() const { return data_.cend(); }
+
   table() = default;
 
   explicit table(size_t n_cols) { ncols_ = n_cols; }
@@ -156,8 +193,7 @@ public:
   }
 
   table<T> natural_join(const table<T> &tab, const join_info &info) const {
-    auto hash_map =
-      tab.template compute_join_hash<join_hash_table>(info.comm_idx2);
+    auto hash_map = compute_join_hash_map(tab, info.comm_idx2);
     table<T> new_tab(info.result_layout.size());
     for (const auto &row : this->data_) {
       auto col_vals = filter_row(info.comm_idx1, row);
@@ -176,7 +212,7 @@ public:
   }
 
   table<T> anti_join(const table<T> &tab, const anti_join_info &info) const {
-    auto hash_set = tab.template compute_join_hash<data_t>(info.comm_idx2);
+    auto hash_set = compute_join_hash_set(tab, info.comm_idx2);
     table<T> new_tab(info.result_layout.size());
     for (const auto &row : data_) {
       auto filtered_row = filter_row(info.comm_idx1, row);
@@ -188,7 +224,7 @@ public:
 
 
   void anti_join_in_place(const table<T> &tab, const anti_join_info &info) {
-    auto hash_set = tab.template compute_join_hash<data_t>(info.comm_idx2);
+    auto hash_set = compute_join_hash_set(tab, info.comm_idx2);
     absl::erase_if(data_, [&info, &hash_set](const auto &row) {
       auto filtered_row = filter_row(info.comm_idx1, row);
       return hash_set.contains(filtered_row);
@@ -206,10 +242,6 @@ public:
   }
 
 private:
-  using data_t = flat_hash_set<vector<T>>;
-  using data_t_ptr = typename data_t::const_pointer;
-  using join_hash_table = flat_hash_map<vector<T>, vector<data_t_ptr>>;
-
   size_t ncols_{};
   data_t data_;
 
@@ -232,23 +264,6 @@ private:
         tab1.add_row(std::move(permuted_row));
       }
     }
-  }
-
-  template<typename R>
-  R compute_join_hash(const vector<size_t> &idxs) const {
-    R res{};
-    res.reserve(data_.size());
-    for (const auto &row : data_) {
-      auto col_vals = filter_row(idxs, row);
-      if constexpr (std::is_same_v<R, join_hash_table>) {
-        res[col_vals].push_back(&row);
-      } else if constexpr (std::is_same_v<R, data_t>) {
-        res.insert(std::move(col_vals));
-      } else {
-        static_assert(always_false_v<R>, "can only return set or hashmap");
-      }
-    }
-    return res;
   }
 };
 }// namespace detail

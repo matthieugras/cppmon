@@ -6,4 +6,5 @@ target_include_directories(common PUBLIC
 target_link_libraries(common
     CONAN_PKG::boost
     fmt::fmt
+    CONAN_PKG::abseil
     CONAN_PKG::nlohmann_json)
