@@ -273,6 +273,7 @@ public:
                tminus);*/
     return gen_db_impl(formula, tplus, tminus, formula.degree());
   }
+  
   void validate_formula(const Formula &formula) {
     validate_formula_impl(formula, formula.fvs());
   }

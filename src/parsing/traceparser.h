@@ -304,7 +304,7 @@ struct [[maybe_unused]] fmt::formatter<
     using parse::monpoly_fmt;
     const auto &arg = arg_wrapper.t;
     if constexpr (std::is_same_v<T, parse::database_tuple>) {
-      return fmt::format_to(ctx.out(), "{:m}", fmt::join(arg, ","));
+      return fmt::format_to(ctx.out(), "{}", fmt::join(arg, ","));
     } else if constexpr (std::is_same_v<T, parse::database_elem>) {
       auto curr_end = ctx.out();
       for (auto it = arg.cbegin(); it != arg.cend();) {
