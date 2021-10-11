@@ -154,8 +154,8 @@ namespace detail {
     };
 
     struct MSince {
-
-      vector<size_t> comm_idx_l, comm_idx_r;
+      size_t nfvs;
+      vector<size_t> comm_idx_r;
       ptr_type<MState> l_state, r_state;
       Interval inter;
       devector<std::pair<size_t, event_table>> data_prev, data_in;
@@ -166,14 +166,15 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
       void add_new_ts(size_t ts);
       void join(event_table &tab_l);
-      void add_new_table(event_table tab_r);
+      void add_new_table(event_table &&tab_r, size_t ts);
       event_table produce_result();
+      void print_state();
     };
 
     struct MUntil {};
 
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
-                             MAndRel, MAndAssign, MAnd>;
+                             MAndRel, MAndAssign, MAnd, MSince>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -198,6 +199,8 @@ namespace detail {
     static init_pair init_next_state(const fo::Formula::next_t &arg);
 
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
+
+    static init_pair init_since_state(const fo::Formula::since_t &arg);
 
     static init_pair init_mstate(const Formula &formula);
     val_type state;

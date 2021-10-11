@@ -21,8 +21,9 @@ namespace detail {
 template<typename T>
 class table;
 }
+/*
 template<typename T>
-struct [[maybe_unused]] fmt::formatter<detail::table<T>>;
+struct [[maybe_unused]] fmt::formatter<detail::table<T>>;*/
 
 namespace detail {
 using absl::flat_hash_map;
@@ -63,7 +64,7 @@ vector<T> filter_row(const vector<size_t> &keep_idxs, const vector<T> &row) {
 
 template<typename T>
 class table {
-  friend struct fmt::formatter<table<T>>;
+  //friend struct fmt::formatter<table<T>>;
 
 public:
   // Forward the iterators of the raw hashset
@@ -76,7 +77,7 @@ public:
 
   static join_hash_map compute_join_hash_map(const table<T> &tab,
                                              const vector<size_t> &idxs) {
-    join_hash_map res{};
+    join_hash_map res;
     res.reserve(tab.data_.size());
     for (const auto &row : tab.data_) {
       auto col_vals = filter_row(idxs, row);
@@ -87,11 +88,20 @@ public:
 
   static join_hash_set compute_join_hash_set(const table<T> &tab,
                                              const vector<size_t> &idxs) {
-    join_hash_set res{};
+    join_hash_set res;
     res.reserve(tab.data_.size());
     for (const auto &row : tab.data_) {
       auto col_vals = filter_row(idxs, row);
       res.insert(std::move(col_vals));
+    }
+    return res;
+  }
+
+  static join_hash_set hash_all_destructive(table<T> &tab) {
+    join_hash_set res;
+    res.reserve(tab.data_.size());
+    for (auto &row: tab.data_) {
+      res.insert(std::move(row));
     }
     return res;
   }
@@ -142,6 +152,10 @@ public:
         return false;
     }
     return true;
+  }
+
+  void reserve(size_t n) {
+    data_.reserve(n);
   }
 
   void add_row(const vector<T> &row) {
@@ -279,7 +293,7 @@ using detail::table;
 using detail::table_layout;
 
 
-template<typename T>
+/*template<typename T>
 struct [[maybe_unused]] fmt::formatter<table<T>> {
   constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
   -> decltype(auto) {
@@ -303,6 +317,6 @@ struct [[maybe_unused]] fmt::formatter<table<T>> {
     }
     return new_out;
   }
-};
+};*/
 
 #endif

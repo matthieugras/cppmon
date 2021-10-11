@@ -47,6 +47,24 @@ bool Interval::operator==(const Interval &other) const {
     return l == other.l;
 }
 
+bool Interval::geq_lower(size_t n) const { return n >= l; }
+
+bool Interval::lt_lower(size_t n) const { return n < l; }
+
+bool Interval::leq_upper(size_t n) const {
+  if (!is_bounded())
+    return true;
+  else
+    return n <= u;
+}
+
+bool Interval::gt_upper(size_t n) const {
+  if (!is_bounded())
+    return false;
+  else
+    return n > u;
+}
+
 Interval Interval::from_json(const json &json_formula) {
   size_t l = nat_from_json(json_formula.at(0));
   optional<size_t> u = enat_from_json(json_formula.at(1));

@@ -17,7 +17,7 @@ static void print_satisfactions(monitor::satisfactions &sats) {
       fmt::print(" true\n");
     else {
       for (const auto &row : tbl) {
-        fmt::print(" ({:m})", fmt::join(row, ","));
+        fmt::print(" ({})", fmt::join(row, ","));
       }
       fmt::print("\n");
     }

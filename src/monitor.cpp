@@ -1,3 +1,5 @@
+#include <fmt/core.h>
+#include <fmt/ranges.h>
 #include <monitor.h>
 
 namespace monitor::detail {
@@ -43,7 +45,7 @@ event_table_vec MState::eval(const database &db, size_t ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
-                                   MOr, MNext, MPrev>) {
+                                   MOr, MNext, MPrev, MSince>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -79,6 +81,8 @@ MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
             info.result_layout};
   } else {
     auto info = get_join_info(l_layout, r_layout);
+    /*fmt::print("and join, child_l: {}, child_r: {}, my: {}\n", l_layout,
+               r_layout, info.result_layout);*/
     return {MAnd{binary_buffer(), uniq(std::move(l_state)),
                  uniq(std::move(r_state)), info},
             info.result_layout};
@@ -193,6 +197,27 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
           rec_layout};
 }
 
+MState::init_pair MState::init_since_state(const fo::Formula::since_t &arg) {
+  auto [l_state, l_layout] = init_mstate(*arg.phil);
+  auto [r_state, r_layout] = init_mstate(*arg.phir);
+  auto info = get_join_info(l_layout, r_layout);
+  /*fmt::print("init since state, child_l: {}, child_r: {}, my: {}\n", l_layout,
+             r_layout, r_layout);*/
+  return {MSince{r_layout.size(),
+                 info.comm_idx2,
+                 uniq(std::move(l_state)),
+                 uniq(std::move(r_state)),
+                 arg.inter,
+                 {},
+                 {},
+                 {},
+                 {},
+                 binary_buffer(),
+                 {}},
+          std::move(r_layout)};
+}
+
+
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -228,7 +253,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
     } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
       return init_next_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::since_t>) {
-      throw not_implemented_error();
+      return init_since_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::until_t>) {
       throw not_implemented_error();
     } else {
@@ -317,8 +342,10 @@ event_table_vec MState::MAnd::eval(const database &db, size_t ts) {
       return tab1.natural_join(tab2, *join_ptr);
     }
   };
-  return apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state, buf,
-                                       db, ts);
+  auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
+                                           buf, db, ts);
+  //fmt::print("MAND returned: {}\n", ret);
+  return ret;
 }
 
 event_table_vec MState::MAndRel::eval(const database &db, size_t ts) {
@@ -401,51 +428,94 @@ event_table_vec MState::MNext::eval(const database &db, size_t ts) {
 }
 
 event_table_vec MState::MSince::eval(const database &db, size_t ts) {
+  //fmt::print("got database {}\n", db);
   ts_buf.push_back(ts);
   auto reduction_fn = [this](event_table &tab_l,
                              event_table &tab_r) -> event_table {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
+    //fmt::print("reduction fn processing new ts {}\n", new_ts);
     ts_buf.pop_front();
     add_new_ts(new_ts);
     join(tab_l);
-    add_new_table(std::move(tab_r));
+    add_new_table(std::move(tab_r), new_ts);
     return produce_result();
   };
-  return apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state, buf,
-                                       db, ts);
+  auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
+                                           buf, db, ts);
+  //fmt::print("msince returned {}\n", ret);
+  print_state();
+  return ret;
 }
 
 void MState::MSince::add_new_ts(size_t ts) {
-  for (; !data_in.empty() && !inter.contains(data_in.back().first - ts);
-       data_in.pop_back()) {}
-  absl::erase_if(tuple_in, [this, ts](const auto &entry) {
-    size_t entry_ts = entry.second;
-    assert(entry_ts >= ts);
-    return !inter.contains(entry_ts - ts);
-  });
+  while (!data_in.empty()) {
+    auto old_ts = data_in.front().first;
+    assert(ts >= old_ts);
+    if (inter.leq_upper(ts - old_ts))
+      break;
+    auto &tab = data_in.front();
+    for (const auto &row : tab.second)
+      tuple_in.erase(row);
+    data_in.pop_front();
+  }
+  for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
+       data_prev.pop_front()) {}
   while (!data_prev.empty()) {
-    auto &latest = data_prev.back();
-    size_t latest_ts = latest.first;
-    assert(latest.first >= ts);
-    if (!inter.contains(latest_ts - ts))
+    auto &latest = data_prev.front();
+    size_t old_ts = latest.first;
+    assert(old_ts <= ts);
+    if (inter.lt_lower(ts - old_ts))
       break;
     for (const auto &row : latest.second) {
       auto since_it = tuple_since.find(row);
-      if (since_it != tuple_since.end() && since_it->second <= latest_ts)
-        tuple_in.insert_or_assign(row, latest_ts);
+      if (since_it != tuple_since.end() && since_it->second <= old_ts)
+        tuple_in.insert_or_assign(row, old_ts);
     }
-    data_in.push_front(std::move(latest));
-    data_prev.pop_back();
+    assert(data_in.empty() || old_ts >= data_in.back().first);
+    data_in.push_back(std::move(latest));
+    data_prev.pop_front();
   }
 }
 
 void MState::MSince::join(event_table &tab_l) {
-
+  auto hash_set = event_table::hash_all_destructive(tab_l);
+  auto erase_cond = [this, &hash_set](const auto &tup) {
+    return !hash_set.contains(filter_row(comm_idx_r, tup.first));
+  };
+  absl::erase_if(tuple_since, erase_cond);
+  absl::erase_if(tuple_in, erase_cond);
 }
 
-void MState::MSince::add_new_table(event_table tab_r) {}
+void MState::MSince::add_new_table(event_table &&tab_r, size_t ts) {
+  for (const auto &row : tab_r) {
+    // Do not override value
+    tuple_since.try_emplace(row, ts);
+  }
+  if (inter.contains(0)) {
+    for (const auto &row : tab_r)
+      tuple_in.insert_or_assign(row, ts);
+    assert(data_in.empty() || ts >= data_in.back().first);
+    data_in.emplace_back(ts, std::move(tab_r));
+  } else {
+    assert(data_prev.empty() || ts >= data_prev.back().first);
+    data_prev.emplace_back(ts, std::move(tab_r));
+  }
+}
 
-event_table MState::MSince::produce_result() {}
+event_table MState::MSince::produce_result() {
+  event_table tab(nfvs);
+  tab.reserve(tuple_in.size());
+  for (const auto &entry : tuple_in) {
+    tab.add_row(entry.first);
+  }
+  return tab;
+}
+
+void MState::MSince::print_state() {
+  /*fmt::print("MSINCE STATE\ncomm_idx_r: {}\ndata_prev: {}\ndata_in: "
+             "{}\ntuple_since: {}\ntuple_in: {}\nts_buf: {}\nEND STATE\n",
+             comm_idx_r, data_prev, data_in, tuple_since, tuple_in, ts_buf);*/
+}
 
 }// namespace monitor::detail

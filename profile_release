@@ -7,6 +7,7 @@ compiler=clang
 compiler.version=12
 compiler.libcxx=libstdc++11
 compiler.cppstd=gnu17
+#build_type=RelWithDebInfo
 build_type=Release
 [options]
 [build_requires]

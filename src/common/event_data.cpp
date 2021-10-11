@@ -7,6 +7,8 @@ using std::string;
 using std::string_view;
 using std::literals::string_view_literals::operator""sv;
 
+event_data::event_data() : tag(HOLDS_INT) {}
+
 void event_data::do_move(event_data &&other) noexcept {
   if (other.tag == HOLDS_INT) {
     i = other.i;
@@ -23,7 +25,6 @@ void event_data::do_move(event_data &&other) noexcept {
   tag = other.tag;
 }
 void event_data::do_copy(const event_data &other) {
-  string_view bla;
   if (other.tag == HOLDS_INT) {
     i = other.i;
   } else if (other.tag == HOLDS_FLOAT) {
@@ -47,9 +48,11 @@ event_data &event_data::operator=(const event_data &other) {
   return *this;
 }
 
-event_data::event_data(const event_data &other) { do_copy(other); }
+event_data::event_data(const event_data &other) : event_data() {
+  do_copy(other);
+}
 
-event_data::event_data(event_data &&other) noexcept {
+event_data::event_data(event_data &&other) noexcept : event_data() {
   do_move(std::move(other));
 }
 

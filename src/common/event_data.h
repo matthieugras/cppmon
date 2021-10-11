@@ -1,6 +1,7 @@
 #ifndef EVENT_DATA_H
 #define EVENT_DATA_H
 
+#include <absl/base/optimization.h>
 #include <boost/operators.hpp>
 #include <boost/variant2/variant.hpp>
 #include <fmt/core.h>
@@ -9,7 +10,6 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <util.h>
-#include <absl/base/optimization.h>
 
 namespace common {
 namespace {
@@ -22,9 +22,9 @@ class event_data : boost::equality_comparable<event_data> {
   friend ::fmt::formatter<event_data>;
 
 public:
-  event_data() = default;
-  event_data& operator=(event_data &&other) noexcept;
-  event_data& operator=(const event_data &other);
+  event_data();
+  event_data &operator=(event_data &&other) noexcept;
+  event_data &operator=(const event_data &other);
   event_data(const event_data &other);
   event_data(event_data &&other) noexcept;
   ~event_data();
@@ -65,7 +65,7 @@ private:
   void do_copy(const event_data &other);
   template<typename F>
   static event_data apply_arith_bin_op(F op, const event_data &l,
-                                           const event_data &r) {
+                                       const event_data &r) {
     if (l.tag == HOLDS_INT && r.tag == HOLDS_INT) {
       return Int(op(l.i, r.i));
     } else if (l.tag == HOLDS_INT && r.tag == HOLDS_FLOAT) {
@@ -94,19 +94,12 @@ private:
 
 template<>
 struct [[maybe_unused]] fmt::formatter<common::event_data> {
-  // Presentation format: `n` - normal with constructor, `m` - monpoly database
-  // format
-
-  char presentation = 'n';
-
   constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
-  -> decltype(ctx.begin()) {
-    auto it = ctx.begin(), end = ctx.end();
-    if (it != end && (*it == 'm'))
-      presentation = *it++;
-    if (it != end && *it != '}')
-      throw format_error(
-        R"(invalid format: ":m" for monpoly, ":n" for normal )");
+  -> decltype(auto) {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it != '}')
+      throw format_error("invalid format - only empty format strings are "
+                         "accepted for event_data");
     return it;
   }
 

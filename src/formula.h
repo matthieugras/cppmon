@@ -126,6 +126,10 @@ class Interval : equality_comparable<Interval> {
 public:
   Interval(size_t l, size_t u, bool bounded = true);
   bool operator==(const Interval &other) const;
+  [[nodiscard]] bool leq_upper(size_t n) const;
+  [[nodiscard]] bool gt_upper(size_t n) const;
+  [[nodiscard]] bool geq_lower(size_t n) const;
+  [[nodiscard]] bool lt_lower(size_t n) const;
   [[nodiscard]] bool contains(size_t n) const;
   [[nodiscard]] bool is_bounded() const;
 
