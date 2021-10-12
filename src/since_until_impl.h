@@ -24,10 +24,11 @@ private:
   void join(event_table &tab_l);
   void add_new_table(event_table &&tab_r, size_t ts);
   event_table produce_result();
+  void cleanup(size_t before_ts);
   void print_state();
 
   bool right_negated;
-  size_t nfvs;
+  size_t nfvs, last_cleanup;
   std::vector<size_t> comm_idx_r;
   fo::Interval inter;
   table_buf data_prev, data_in;

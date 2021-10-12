@@ -5,7 +5,7 @@ namespace monitor::detail {
 
 m_since_impl::m_since_impl(bool right_negated, size_t nfvs,
                            std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : right_negated(right_negated), nfvs(nfvs),
+    : right_negated(right_negated), nfvs(nfvs), last_cleanup(0),
       comm_idx_r(std::move(comm_idx_r)), inter(inter) {}
 
 event_table m_since_impl::eval(event_table &tab_l, event_table &tab_r,
@@ -13,8 +13,20 @@ event_table m_since_impl::eval(event_table &tab_l, event_table &tab_r,
   add_new_ts(new_ts);
   join(tab_l);
   add_new_table(std::move(tab_r), new_ts);
+  if (inter.gt_upper(new_ts - last_cleanup)) {
+    cleanup(last_cleanup);
+    last_cleanup = new_ts;
+  }
   return produce_result();
 }
+
+void m_since_impl::cleanup(size_t before_ts) {
+  auto cleanup_fn = [before_ts](const auto &entry) {
+    return entry.second <= before_ts;
+  };
+  absl::erase_if(tuple_since, cleanup_fn);
+}
+
 void m_since_impl::add_new_ts(size_t ts) {
   while (!data_in.empty()) {
     auto old_ts = data_in.front().first;
@@ -47,6 +59,7 @@ void m_since_impl::add_new_ts(size_t ts) {
     data_prev.pop_front();
   }
 }
+
 void m_since_impl::join(event_table &tab_l) {
   auto hash_set = event_table::hash_all_destructive(tab_l);
   auto erase_cond = [this, &hash_set](const auto &tup) {
@@ -58,6 +71,7 @@ void m_since_impl::join(event_table &tab_l) {
   absl::erase_if(tuple_since, erase_cond);
   absl::erase_if(tuple_in, erase_cond);
 }
+
 void m_since_impl::add_new_table(event_table &&tab_r, size_t ts) {
   for (const auto &row : tab_r) {
     // Do not override element
