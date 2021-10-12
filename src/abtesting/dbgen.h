@@ -27,8 +27,6 @@ private:
   void update_or_insert(parse::database &db, const std::string &pred_name,
                         const std::vector<int> &pred_args);
 
-  void destructive_merge(parse::database &db1, parse::database &&db2);
-
   simple_tab prepend_col(const simple_tab &tab,
                          const std::vector<int> &col_vals);
 

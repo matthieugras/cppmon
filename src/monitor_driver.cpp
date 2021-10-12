@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cassert>
 #include <fmt/core.h>
 #include <monitor.h>

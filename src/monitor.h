@@ -10,7 +10,9 @@
 #include <event_data.h>
 #include <formula.h>
 #include <iterator>
+#include <monitor_types.h>
 #include <optional>
+#include <since_until_impl.h>
 #include <stdexcept>
 #include <string_view>
 #include <table.h>
@@ -42,13 +44,6 @@ namespace detail {
   using fo::ptr_type;
   using fo::Term;
 
-  using event_table = table<event_data>;
-  using event_table_vec = vector<event_table>;
-  // (ts, tp, data)
-  using satisfactions =
-    vector<std::tuple<size_t, size_t, vector<vector<event_data>>>>;
-  using database = parse::database;
-  using binary_buffer = common::binary_buffer<event_table>;
   class monitor;
 
   template<typename F, typename T>
@@ -154,21 +149,12 @@ namespace detail {
     };
 
     struct MSince {
-      size_t nfvs;
-      vector<size_t> comm_idx_r;
-      ptr_type<MState> l_state, r_state;
-      Interval inter;
-      devector<std::pair<size_t, event_table>> data_prev, data_in;
-      absl::flat_hash_map<vector<event_data>, size_t> tuple_since, tuple_in;
       binary_buffer buf;
       devector<size_t> ts_buf;
+      ptr_type<MState> l_state, r_state;
+      m_since_impl impl;
 
       event_table_vec eval(const database &db, size_t ts);
-      void add_new_ts(size_t ts);
-      void join(event_table &tab_l);
-      void add_new_table(event_table &&tab_r, size_t ts);
-      event_table produce_result();
-      void print_state();
     };
 
     struct MUntil {};
@@ -222,9 +208,7 @@ namespace detail {
 
 }// namespace detail
 
-using detail::event_table;
 using detail::monitor;
-using detail::satisfactions;
 
 }// namespace monitor
 

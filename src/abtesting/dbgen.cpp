@@ -147,19 +147,6 @@ void dbgen::update_or_insert(database &db, const std::string &pred_name,
     it->second.push_back(std::move(ev_dat));
   }
 }
-
-void dbgen::destructive_merge(database &db1, database &&db2) {
-  for (auto &[pred_name, db_elem] : db2) {
-    auto it = db1.find(pred_name);
-    if (it == db1.end()) {
-      db1.insert(std::pair(pred_name, std::move(db_elem)));
-    } else {
-      it->second.insert(it->second.end(),
-                        std::make_move_iterator(db_elem.begin()),
-                        std::make_move_iterator(db_elem.end()));
-    }
-  }
-}
 dbgen::simple_tab dbgen::prepend_col(const simple_tab &tab,
                                      const std::vector<int> &col_vals) {
   simple_tab res_tab;
@@ -234,8 +221,15 @@ dbgen::ts_db_list dbgen::gen_db_impl(const Formula &formula, simple_tab pos,
         return {};
       size_t ts_j = curr_ts - ts_j_offset;
       auto res = gen_db_impl(*arg.phir, pos, neg, nfvs, ts_j);
+      const Formula *phil;
+      if (const auto *ptr = arg.phil->inner_if_neg()) {
+        phil = ptr;
+        swap(pos, neg);
+      } else {
+        phil = arg.phil.get();
+      }
       for (size_t ts_i = ts_j + 1; ts_i <= curr_ts; ++ts_i) {
-        auto res_i = gen_db_impl(*arg.phil, pos, neg, nfvs, ts_i);
+        auto res_i = gen_db_impl(*phil, pos, neg, nfvs, ts_i);
         merge_ts_db_list(res, res_i);
       }
       return res;
