@@ -3,6 +3,7 @@
 
 #include <absl/container/flat_hash_set.h>
 #include <absl/hash/hash.h>
+#include <absl/random/random.h>
 #include <boost/operators.hpp>
 #include <boost/variant2/variant.hpp>
 #include <cstddef>
@@ -22,7 +23,7 @@ class MState;
 struct MPred;
 }// namespace monitor::detail
 
-class db_gen;
+class dbgen;
 
 namespace fo {
 namespace {
@@ -52,7 +53,7 @@ struct Formula;
 struct Term : equality_comparable<Term> {
   friend Formula;
   friend ::monitor::detail::MPred;
-  friend ::db_gen;
+  friend ::dbgen;
   friend class ::monitor::detail::MState;
 
 public:
@@ -132,6 +133,12 @@ public:
   [[nodiscard]] bool lt_lower(size_t n) const;
   [[nodiscard]] bool contains(size_t n) const;
   [[nodiscard]] bool is_bounded() const;
+  template<typename Rnd>
+  size_t random_sample(Rnd &bitgen) const {
+    if (!bounded)
+      throw std::runtime_error("interval is not bounded");
+    return absl::Uniform<size_t>(bitgen, l, u);
+  }
 
 private:
   static Interval from_json(const json &json_formula);
@@ -141,7 +148,7 @@ private:
 
 struct Formula : equality_comparable<Formula> {
   friend class ::monitor::detail::MState;
-  friend class ::db_gen;
+  friend class ::dbgen;
 
 public:
   Formula(const Formula &formula);

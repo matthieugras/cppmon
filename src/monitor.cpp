@@ -344,7 +344,7 @@ event_table_vec MState::MAnd::eval(const database &db, size_t ts) {
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
-  //fmt::print("MAND returned: {}\n", ret);
+  // fmt::print("MAND returned: {}\n", ret);
   return ret;
 }
 
@@ -443,8 +443,8 @@ event_table_vec MState::MSince::eval(const database &db, size_t ts) {
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
-  //fmt::print("msince returned {}\n", ret);
-  print_state();
+  // fmt::print("msince returned {}\n", ret);
+  //print_state();
   return ret;
 }
 
@@ -455,8 +455,11 @@ void MState::MSince::add_new_ts(size_t ts) {
     if (inter.leq_upper(ts - old_ts))
       break;
     auto &tab = data_in.front();
-    for (const auto &row : tab.second)
-      tuple_in.erase(row);
+    for (const auto &row : tab.second) {
+      auto in_it = tuple_in.find(row);
+      if (in_it != tuple_in.end() && in_it->second == tab.first)
+        tuple_in.erase(in_it);
+    }
     data_in.pop_front();
   }
   for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
@@ -489,7 +492,7 @@ void MState::MSince::join(event_table &tab_l) {
 
 void MState::MSince::add_new_table(event_table &&tab_r, size_t ts) {
   for (const auto &row : tab_r) {
-    // Do not override value
+    // Do not override element
     tuple_since.try_emplace(row, ts);
   }
   if (inter.contains(0)) {
@@ -513,9 +516,9 @@ event_table MState::MSince::produce_result() {
 }
 
 void MState::MSince::print_state() {
-  /*fmt::print("MSINCE STATE\ncomm_idx_r: {}\ndata_prev: {}\ndata_in: "
+  fmt::print("MSINCE STATE\ncomm_idx_r: {}\ndata_prev: {}\ndata_in: "
              "{}\ntuple_since: {}\ntuple_in: {}\nts_buf: {}\nEND STATE\n",
-             comm_idx_r, data_prev, data_in, tuple_since, tuple_in, ts_buf);*/
+             comm_idx_r, data_prev, data_in, tuple_since, tuple_in, ts_buf);
 }
 
 }// namespace monitor::detail
