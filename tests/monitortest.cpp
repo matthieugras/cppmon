@@ -1,9 +1,11 @@
 #include <event_data.h>
 #include <fmt/core.h>
-#include <fmt/ranges.h>
 #include <formula.h>
 #include <gtest/gtest.h>
 #include <monitor.h>
+#include <vector>
+#include <hash_cache.h>
+#include <absl/container/flat_hash_map.h>
 
 
 using namespace fo;
@@ -32,4 +34,9 @@ TEST(MState, Bla) {
   fmt::print("RESULT IS: {}\n", res3);
   auto res4 = mon.step({{"P", {{ed::String("a")}}}}, 7);
   fmt::print("RESULT IS: {}\n", res4);
+}
+
+TEST(MState, HashCache) {
+  using common::event_data;
+  using common::hash_cached;
 }

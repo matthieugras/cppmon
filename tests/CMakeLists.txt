@@ -10,6 +10,7 @@ target_include_directories(testexe PRIVATE
     ${TEST_INCLUDES})
 target_link_libraries(testexe
     CONAN_PKG::gtest
+    CONAN_PKG::abseil
     fmt::fmt
     common
     monitor

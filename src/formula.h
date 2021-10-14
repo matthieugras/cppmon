@@ -125,7 +125,7 @@ class Interval : equality_comparable<Interval> {
   friend Formula;
 
 public:
-  Interval(size_t l, size_t u, bool bounded = true);
+  Interval(size_t lower_bound, size_t upper_bound, bool bounded = true);
   bool operator==(const Interval &other) const;
   [[nodiscard]] bool leq_upper(size_t n) const;
   [[nodiscard]] bool gt_upper(size_t n) const;
@@ -133,17 +133,18 @@ public:
   [[nodiscard]] bool lt_lower(size_t n) const;
   [[nodiscard]] bool contains(size_t n) const;
   [[nodiscard]] bool is_bounded() const;
+  [[nodiscard]] size_t get_lower() const;
   template<typename Rnd>
   size_t random_sample(Rnd &bitgen) const {
-    if (!bounded)
+    if (!bounded_)
       throw std::runtime_error("interval is not bounded");
-    return absl::Uniform<size_t>(bitgen, l, u);
+    return absl::Uniform<size_t>(bitgen, l_, u_);
   }
 
 private:
   static Interval from_json(const json &json_formula);
-  size_t l, u;
-  bool bounded;
+  size_t l_, u_;
+  bool bounded_;
 };
 
 struct Formula : equality_comparable<Formula> {

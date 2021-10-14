@@ -196,33 +196,6 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
           rec_layout};
 }
 
-MState::init_pair MState::init_since_state(const fo::Formula::since_t &arg) {
-  auto [r_state, r_layout] = init_mstate(*arg.phir);
-  ptr_type<MState> l_state;
-  table_layout l_layout;
-  bool is_neg = false;
-  if (const auto *neg_inner = arg.phil->inner_if_neg()) {
-    auto inner_neg_pair = init_mstate(*neg_inner);
-    l_state = uniq(std::move(inner_neg_pair.first));
-    l_layout = std::move(inner_neg_pair.second);
-    is_neg = true;
-  } else {
-    auto pos_pair = init_mstate(*arg.phil);
-    l_state = uniq(std::move(pos_pair.first));
-    l_layout = std::move(pos_pair.second);
-  }
-  auto info = get_join_info(l_layout, r_layout);
-  m_since_impl impl(is_neg, r_layout.size(), std::move(info.comm_idx2),
-                    arg.inter);
-  return {MSince{binary_buffer(),
-                 {},
-                 std::move(l_state),
-                 uniq(std::move(r_state)),
-                 impl},
-          std::move(r_layout)};
-}
-
-
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -257,8 +230,9 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       return init_prev_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
       return init_next_state(arg);
-    } else if constexpr (is_same_v<T, fo::Formula::since_t>) {
-      return init_since_state(arg);
+    } else if constexpr (any_type_equal_v<T, fo::Formula::since_t,
+                                          fo::Formula::until_t>) {
+      return init_since_until(arg);
     } else if constexpr (is_same_v<T, fo::Formula::until_t>) {
       throw not_implemented_error();
     } else {
@@ -433,20 +407,31 @@ event_table_vec MState::MNext::eval(const database &db, size_t ts) {
 }
 
 event_table_vec MState::MSince::eval(const database &db, size_t ts) {
-  // fmt::print("got database {}\n", db);
   ts_buf.push_back(ts);
   auto reduction_fn = [this](event_table &tab_l,
                              event_table &tab_r) -> event_table {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
-    // fmt::print("reduction fn processing new ts {}\n", new_ts);
     ts_buf.pop_front();
     return impl.eval(tab_l, tab_r, new_ts);
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
-  // fmt::print("msince returned {}\n", ret);
-  // print_state();
+  return ret;
+}
+
+event_table_vec MState::MUntil::eval(const database &db, size_t ts) {
+  ts_buf.push_back(ts);
+  auto reduction_fn = [this](event_table &tab_l,
+                             event_table &tab_r) -> event_table_vec {
+    assert(!ts_buf.empty());
+    size_t new_ts = ts_buf.front();
+    ts_buf.pop_front();
+    impl.add_tables(tab_l, tab_r, new_ts);
+    return impl.eval(ts_buf.empty() ? new_ts : ts_buf.front());
+  };
+  auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
+                                           buf, db, ts);
   return ret;
 }
 

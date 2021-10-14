@@ -51,7 +51,22 @@ namespace detail {
                                                 binary_buffer &buf,
                                                 const database &db, size_t ts) {
     auto l_rec_tabs = t1.eval(db, ts), r_rec_tabs = t2.eval(db, ts);
-    return buf.template update_and_reduce(l_rec_tabs, r_rec_tabs, f);
+    auto res = buf.template update_and_reduce(l_rec_tabs, r_rec_tabs, f);
+    if constexpr (std::is_same_v<decltype(res), event_table_vec>) {
+      return res;
+    } else {
+      static_assert(
+        std::is_same_v<decltype(res), std::vector<event_table_vec>>);
+      event_table_vec acc;
+      size_t total_size = 0;
+      for (const auto &elem : res)
+        total_size += elem.size();
+      acc.reserve(total_size);
+      for (auto &elem : res)
+        acc.insert(acc.end(), std::make_move_iterator(elem.begin()),
+                   std::make_move_iterator(elem.end()));
+      return acc;
+    }
   }
 
 
@@ -82,8 +97,7 @@ namespace detail {
       vector<pair<size_t, event_data>> pos_2_cst;
       event_table_vec eval(const database &db, size_t ts);
 
-      [[nodiscard]] optional<vector<event_data>>
-      match(const vector<event_data> &event_args) const;
+      [[nodiscard]] optional<event> match(const event &event_args) const;
     };
 
     struct MAnd {
@@ -128,7 +142,6 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
-
     struct MPrev {
       Interval inter;
       size_t num_fvs;
@@ -157,10 +170,17 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
-    struct MUntil {};
+    struct MUntil {
+      binary_buffer buf;
+      devector<size_t> ts_buf;
+      ptr_type<MState> l_state, r_state;
+      m_until_impl impl;
+
+      event_table_vec eval(const database &db, size_t ts);
+    };
 
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
-                             MAndRel, MAndAssign, MAnd, MSince>;
+                             MAndRel, MAndAssign, MAnd, MSince, MUntil>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -186,7 +206,39 @@ namespace detail {
 
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
 
-    static init_pair init_since_state(const fo::Formula::since_t &arg);
+    template<typename T>
+    static std::enable_if_t<
+      any_type_equal_v<T, fo::Formula::until_t, fo::Formula::since_t>,
+      init_pair>
+    init_since_until(const T &arg) {
+      using St = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
+                                    MSince, MUntil>;
+      using Impl = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
+                                      m_since_impl, m_until_impl>;
+      auto [r_state, r_layout] = init_mstate(*arg.phir);
+      ptr_type<MState> l_state;
+      table_layout l_layout;
+      bool left_negated = false;
+      if (const auto *neg_inner = arg.phil->inner_if_neg()) {
+        auto inner_neg_pair = init_mstate(*neg_inner);
+        l_state = uniq(std::move(inner_neg_pair.first));
+        l_layout = std::move(inner_neg_pair.second);
+        left_negated = true;
+      } else {
+        auto pos_pair = init_mstate(*arg.phil);
+        l_state = uniq(std::move(pos_pair.first));
+        l_layout = std::move(pos_pair.second);
+      }
+      auto info = get_join_info(l_layout, r_layout);
+      Impl impl(left_negated, r_layout.size(), std::move(info.comm_idx2),
+                arg.inter);
+      return {St{binary_buffer(),
+                 {},
+                 std::move(l_state),
+                 uniq(std::move(r_state)),
+                 impl},
+              std::move(r_layout)};
+    }
 
     static init_pair init_mstate(const Formula &formula);
     val_type state;

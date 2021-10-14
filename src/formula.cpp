@@ -30,39 +30,41 @@ optional<size_t> enat_from_json(const json &json_formula) {
 }
 
 // Interval member function
-Interval::Interval(size_t l, size_t u, bool bounded)
-    : l(l), u(u), bounded(bounded) {
+Interval::Interval(size_t lower_bound, size_t upper_bound, bool bounded)
+    : l_(lower_bound), u_(upper_bound), bounded_(bounded) {
 #ifndef NDEBUG
-  if (bounded && l > u)
+  if (bounded && l_ > u_)
     throw std::invalid_argument("must have l <= u");
 #endif
 }
 
 bool Interval::operator==(const Interval &other) const {
-  if (bounded != other.bounded)
+  if (bounded_ != other.bounded_)
     return false;
-  if (bounded)
-    return l == other.l && u == other.u;
+  if (bounded_)
+    return l_ == other.l_ && u_ == other.u_;
   else
-    return l == other.l;
+    return l_ == other.l_;
 }
 
-bool Interval::geq_lower(size_t n) const { return n >= l; }
+size_t Interval::get_lower() const { return l_; }
 
-bool Interval::lt_lower(size_t n) const { return n < l; }
+bool Interval::geq_lower(size_t n) const { return n >= l_; }
+
+bool Interval::lt_lower(size_t n) const { return n < l_; }
 
 bool Interval::leq_upper(size_t n) const {
   if (!is_bounded())
     return true;
   else
-    return n <= u;
+    return n <= u_;
 }
 
 bool Interval::gt_upper(size_t n) const {
   if (!is_bounded())
     return false;
   else
-    return n > u;
+    return n > u_;
 }
 
 Interval Interval::from_json(const json &json_formula) {
@@ -75,13 +77,13 @@ Interval Interval::from_json(const json &json_formula) {
 }
 
 bool Interval::contains(size_t n) const {
-  if (!bounded)
-    return n >= l;
+  if (!bounded_)
+    return n >= l_;
   else
-    return n >= l && n <= u;
+    return n >= l_ && n <= u_;
 }
 
-bool Interval::is_bounded() const { return bounded; }
+bool Interval::is_bounded() const { return bounded_; }
 
 // Term member functions
 Term::Term(const Term &t) : val(copy_val(t.val)) {}
@@ -236,7 +238,8 @@ fv_set Term::fvi(size_t num_bound_vars) const {
       }
     } else if constexpr (any_type_equal_v<T, plus_t, minus_t, mult_t, div_t,
                                           mod_t>) {
-      auto fvs1 = arg.l->fvi(num_bound_vars), fvs2 = arg.r->fvi(num_bound_vars);
+      auto fvs1 = arg.l->fvi(num_bound_vars),
+           fvs2 = arg.r->fvi(num_bound_vars);
       fvs1.insert(fvs2.begin(), fvs2.end());
       return fvs1;
     } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
@@ -543,28 +546,4 @@ bool Formula::is_safe_formula() const {
   };
   return var2::visit(visitor, val);
 }
-
-/*
-bool Formula::is_future_bounded() const {
-  auto visitor = [](auto &&arg) -> bool {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (any_type_equal_v<T, pred_t, eq_t, less_t, less_eq_t>) {
-      return true;
-    } else if constexpr (any_type_equal_v<T, neg_t, exists_t, prev_t, next_t>) {
-      return arg.phi->is_future_bounded();
-    } else if constexpr (any_type_equal_v<T, or_t, and_t, since_t>) {
-      return arg.phil->is_future_bounded() && arg.phir->is_future_bounded();
-    } else if constexpr (any_type_equal_v<T, until_t>) {
-      return arg.phil->is_future_bounded() && arg.phir->is_future_bounded() &&
-             arg.inter.is_bounded();
-    } else {
-      static_assert(always_false_v<T>, "not exhaustive");
-    }
-  };
-  return var2::visit(visitor, val);
-}*/
-
-/*bool Formula::is_monitorable() const {
-  return is_safe_formula() && is_future_bounded();
-}*/
 }// namespace fo

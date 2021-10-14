@@ -37,7 +37,6 @@ static vector<size_t> sample_idxs(size_t n, size_t n_samples) {
 }
 
 static void BM_table_join(benchmark::State &state) {
-  // TODO: debug crash
   size_t output_size_sum = 0;
   size_t num_iters = 0;
   size_t n_common_cols = state.range(0), n_cols = state.range(1),
