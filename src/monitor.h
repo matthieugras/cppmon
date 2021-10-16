@@ -12,13 +12,14 @@
 #include <iterator>
 #include <monitor_types.h>
 #include <optional>
-#include <since_until_impl.h>
+#include <since_impl.h>
 #include <stdexcept>
 #include <string_view>
 #include <table.h>
 #include <traceparser.h>
 #include <tuple>
 #include <type_traits>
+#include <until_impl.h>
 #include <util.h>
 #include <variant>
 #include <vector>
@@ -75,8 +76,8 @@ namespace detail {
 
     template<typename F, typename T>
     friend event_table_vec
-    apply_recursive_bin_reduction(F f, T &t1, T &t2, binary_buffer &buf,
-                                  const database &db, size_t ts);
+    apply_recursive_bin_reduction(F, T &, T &, binary_buffer &,
+                                  database const &, size_t);
 
     MState() = default;
     MState &operator=(MState &&other) = default;
@@ -165,7 +166,7 @@ namespace detail {
       binary_buffer buf;
       devector<size_t> ts_buf;
       ptr_type<MState> l_state, r_state;
-      m_since_impl impl;
+      since_impl impl;
 
       event_table_vec eval(const database &db, size_t ts);
     };
@@ -174,7 +175,7 @@ namespace detail {
       binary_buffer buf;
       devector<size_t> ts_buf;
       ptr_type<MState> l_state, r_state;
-      m_until_impl impl;
+      until_impl impl;
 
       event_table_vec eval(const database &db, size_t ts);
     };
@@ -214,7 +215,7 @@ namespace detail {
       using St = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
                                     MSince, MUntil>;
       using Impl = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
-                                      m_since_impl, m_until_impl>;
+                                      since_impl, until_impl>;
       auto [r_state, r_layout] = init_mstate(*arg.phir);
       ptr_type<MState> l_state;
       table_layout l_layout;

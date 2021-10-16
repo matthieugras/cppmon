@@ -1,5 +1,6 @@
 #include <cassert>
 #include <fmt/core.h>
+#include <limits>
 #include <monitor.h>
 #include <monitor_driver.h>
 #include <string>
@@ -55,4 +56,6 @@ void monitor_driver::do_monitor() {
     auto sats = monitor_.step(db, ts);
     print_satisfactions(sats);
   }
+  auto sats_last = monitor_.step({}, std::numeric_limits<size_t>::max());
+  print_satisfactions(sats_last);
 }

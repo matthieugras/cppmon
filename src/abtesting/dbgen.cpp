@@ -233,6 +233,22 @@ dbgen::ts_db_list dbgen::gen_db_impl(const Formula &formula, simple_tab pos,
         merge_ts_db_list(res, res_i);
       }
       return res;
+    } else if constexpr (std::is_same_v<T, Formula::until_t>) {
+      size_t ts_j_offset = arg.inter.random_sample(bitgen);
+      size_t ts_j = curr_ts + ts_j_offset;
+      auto res = gen_db_impl(*arg.phir, pos, neg, nfvs, ts_j);
+      const Formula *phil;
+      if (const auto *ptr = arg.phil->inner_if_neg()) {
+        phil = ptr;
+        swap(pos, neg);
+      } else {
+        phil = arg.phil.get();
+      }
+      for (size_t ts_i = curr_ts; ts_i < ts_j; ++ts_i) {
+        auto res_i = gen_db_impl(*phil, pos, neg, nfvs, ts_i);
+        merge_ts_db_list(res, res_i);
+      }
+      return res;
     } else if constexpr (std::is_same_v<T, Formula::pred_t>) {
       if (pos.empty())
         return {};

@@ -44,7 +44,7 @@ event_table_vec MState::eval(const database &db, size_t ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
-                                   MOr, MNext, MPrev, MSince>) {
+                                   MOr, MNext, MPrev, MSince, MUntil>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -427,8 +427,16 @@ event_table_vec MState::MUntil::eval(const database &db, size_t ts) {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
     ts_buf.pop_front();
+    //fmt::print("calling add_tables with ts {}\n", new_ts);
     impl.add_tables(tab_l, tab_r, new_ts);
-    return impl.eval(ts_buf.empty() ? new_ts : ts_buf.front());
+    //fmt::print("state after add_tables():\n");
+    //impl.print_state();
+    new_ts = ts_buf.empty() ? new_ts : ts_buf.front();
+    //fmt::print("calling eval with ts {}\n", new_ts);
+    auto bla = impl.eval(new_ts);
+    //fmt::print("state after eval():\n");
+    //impl.print_state();
+    return bla;
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);

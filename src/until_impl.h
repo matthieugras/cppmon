@@ -1,7 +1,8 @@
-#ifndef CPPMON_SINCE_UNTIL_IMPL_H
-#define CPPMON_SINCE_UNTIL_IMPL_H
+#ifndef CPPMON_UNTIL_IMPL_H
+#define CPPMON_UNTIL_IMPL_H
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/container/node_hash_map.h>
 #include <boost/container/devector.hpp>
 #include <event_data.h>
 #include <formula.h>
@@ -10,38 +11,15 @@
 #include <vector>
 
 namespace monitor::detail {
-class m_since_impl {
+
+
+class until_impl {
 public:
-  m_since_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
-               fo::Interval inter);
-  event_table eval(event_table &tab_l, event_table &tab_r, size_t ts);
-
-private:
-  using table_buf = boost::container::devector<std::pair<size_t, event_table>>;
-  using tuple_buf =
-    absl::flat_hash_map<std::vector<common::event_data>, size_t>;
-  void drop_too_old(size_t ts);
-  void add_new_ts(size_t ts);
-  void join(event_table &tab_l);
-  void add_new_table(event_table &&tab_r, size_t ts);
-  event_table produce_result();
-  void cleanup(size_t before_ts);
-  void print_state();
-
-  bool left_negated;
-  size_t nfvs, last_cleanup;
-  std::vector<size_t> comm_idx_r;
-  fo::Interval inter;
-  table_buf data_prev, data_in;
-  tuple_buf tuple_since, tuple_in;
-};
-
-class m_until_impl {
-public:
-  m_until_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
+  until_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
                fo::Interval inter);
   event_table_vec eval(size_t new_ts);
   void add_tables(event_table &tab_l, event_table &tab_r, size_t new_ts);
+  void print_state();
 
 private:
   using tuple_t = std::vector<common::event_data>;
@@ -51,7 +29,8 @@ private:
   using a2_map_t = absl::flat_hash_map<size_t, a2_elem_t>;
 
   void combine_max(const a2_elem_t &mapping1, a2_elem_t &mapping2);
-  void update_a2_inner_map(size_t override_tp, const event &e, size_t new_ts_tp);
+  void update_a2_inner_map(size_t override_tp, const event &e,
+                           size_t new_ts_tp);
   void update_a2_map(size_t new_ts, const event_table &tab_r);
   void update_a1_map(const event_table &tab_l);
   event_table table_from_filtered_map(const a2_elem_t &mapping, size_t ts,
@@ -65,10 +44,11 @@ private:
   fo::Interval inter;
   ts_buf_t ts_buf;
   a1_map_t a1_map;
-  // TODO: optimize, the values of a2 map should be sorted
+  // I don't think think that a2_map has to be a map if we keep track
+  // of the lowest index
   a2_map_t a2_map;
   event_table_vec res_acc;
 };
 }// namespace monitor::detail
 
-#endif
+#endif// CPPMON_UNTIL_IMPL_H
