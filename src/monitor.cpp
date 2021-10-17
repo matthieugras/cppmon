@@ -413,13 +413,13 @@ event_table_vec MState::MSince::eval(const database &db, size_t ts) {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
     ts_buf.pop_front();
-    fmt::print(
+    /*fmt::print(
       "calling since_impl eval with new ts: {}, tab_l: {}, tab_r: {}\n", new_ts,
-      tab_l, tab_r);
+      tab_l, tab_r);*/
     auto ret = impl.eval(tab_l, tab_r, new_ts);
-    fmt::print("since_impl returned: {}\n", ret);
-    fmt::print("since_impl state is:\n");
-    impl.print_state();
+    //fmt::print("since_impl returned: {}\n", ret);
+    //fmt::print("since_impl state is:\n");
+    //impl.print_state();
     return ret;
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,

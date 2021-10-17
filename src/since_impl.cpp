@@ -3,29 +3,14 @@
 namespace monitor::detail {
 since_impl::since_impl(bool left_negated, size_t nfvs,
                        std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : left_negated(left_negated), nfvs(nfvs), last_cleanup(0),
-      comm_idx_r(std::move(comm_idx_r)), inter(inter) {}
+    : left_negated(left_negated), nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)), inter(inter) {}
 
 event_table since_impl::eval(event_table &tab_l, event_table &tab_r,
                              size_t new_ts) {
   add_new_ts(new_ts);
   join(tab_l);
   add_new_table(std::move(tab_r), new_ts);
-  if (inter.gt_upper(new_ts - last_cleanup)) {
-    cleanup(last_cleanup);
-    last_cleanup = new_ts;
-  }
   return produce_result();
-}
-
-void since_impl::cleanup(size_t before_ts) {
-  /*
-  auto cleanup_fn = [before_ts](const auto &entry) {
-    return entry.second <= before_ts;
-  };
-  absl::erase_if(tuple_since, cleanup_fn);
-   */
-  // TODO: use hash caching
 }
 
 void since_impl::drop_too_old(size_t ts) {
@@ -39,10 +24,21 @@ void since_impl::drop_too_old(size_t ts) {
       auto in_it = tuple_in.find(e);
       if (in_it != tuple_in.end() && in_it->second == tab.first)
         tuple_in.erase(in_it);
+      auto since_it = tuple_since.find(e);
+      assert(since_it == tuple_since.end() || since_it->second.second > 0);
+      if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
+        tuple_since.erase(since_it);
     }
   }
   for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
-       data_prev.pop_front()) {}
+       data_prev.pop_front()) {
+    for (const auto &e : data_prev.front().second) {
+      auto since_it = tuple_since.find(e);
+      assert(since_it == tuple_since.end() || since_it->second.second > 0);
+      if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
+        tuple_since.erase(since_it);
+    }
+  }
 }
 
 void since_impl::add_new_ts(size_t ts) {
@@ -55,7 +51,7 @@ void since_impl::add_new_ts(size_t ts) {
       break;
     for (const auto &e : latest.second) {
       auto since_it = tuple_since.find(e);
-      if (since_it != tuple_since.end() && since_it->second <= old_ts)
+      if (since_it != tuple_since.end() && since_it->second.first <= old_ts)
         tuple_in.insert_or_assign(e, old_ts);
     }
     assert(data_in.empty() || old_ts >= data_in.back().first);
@@ -76,8 +72,13 @@ void since_impl::join(event_table &tab_l) {
 }
 
 void since_impl::add_new_table(event_table &&tab_r, size_t ts) {
-  for (const auto &e : tab_r)
-    tuple_since.try_emplace(e, ts);
+  for (const auto &e : tab_r) {
+    auto since_it = tuple_since.find(e);
+    if (since_it == tuple_since.end())
+      tuple_since.emplace(e, std::pair(ts, 1));
+    else
+      since_it->second.second++;
+  }
   if (inter.contains(0)) {
     for (const auto &e : tab_r)
       tuple_in.insert_or_assign(e, ts);
