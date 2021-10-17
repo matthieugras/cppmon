@@ -3,7 +3,7 @@
 
 namespace monitor::detail {
 until_impl::until_impl(bool left_negated, size_t nfvs,
-                           std::vector<size_t> comm_idx_r, fo::Interval inter)
+                       std::vector<size_t> comm_idx_r, fo::Interval inter)
     : left_negated(left_negated), contains_zero(inter.contains(0)), curr_tp(0),
       nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)), inter(inter) {
   a2_map.emplace(0, a2_elem_t());
@@ -24,7 +24,7 @@ event_table_vec until_impl::eval(size_t new_ts) {
 }
 
 void until_impl::update_a2_inner_map(size_t tp, const event &e,
-                                       size_t new_ts_tp) {
+                                     size_t new_ts_tp) {
   auto a2_it = a2_map.find(tp);
   if (a2_it == a2_map.end()) {
     a2_map_t::mapped_type nested_map;
@@ -87,7 +87,7 @@ void until_impl::update_a1_map(const event_table &tab_l) {
 }
 
 void until_impl::add_tables(event_table &tab_l, event_table &tab_r,
-                              size_t new_ts) {
+                            size_t new_ts) {
   assert(ts_buf.empty() || new_ts >= ts_buf.back());
   shift(new_ts);
   update_a2_map(new_ts, tab_r);
@@ -96,18 +96,15 @@ void until_impl::add_tables(event_table &tab_l, event_table &tab_r,
   ts_buf.push_back(new_ts);
 }
 
-event_table until_impl::table_from_filtered_map(const a2_elem_t &mapping,
-                                                  size_t ts, size_t first_tp) {
-  event_table res(nfvs);
-  for (const auto &[e, tstp] : mapping) {
-    if ((!contains_zero && ts < tstp) || (contains_zero && first_tp <= tstp)) {
-      res.add_row(e);
-    }
+event_table until_impl::table_from_map(const a2_elem_t &mapping) {
+  event_table res_tab(nfvs);
+  for (const auto &entry : mapping) {
+    res_tab.add_row(entry.first);
   }
-  return res;
+  return res_tab;
 }
 
-void until_impl::combine_max(const a2_elem_t &mapping1, a2_elem_t &mapping2) {
+void until_impl::combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2) {
   for (const auto &entry : mapping1) {
     auto mapping2_it = mapping2.find(entry.first);
     if (mapping2_it == mapping2.end())
@@ -130,9 +127,19 @@ void until_impl::shift(size_t new_ts) {
     // fmt::print("first tp is: {}\n", first_tp);
     auto a2_it = a2_map.find(first_tp);
     assert(a2_it != a2_map.end());
-    res_acc.push_back(table_from_filtered_map(a2_it->second, old_ts, first_tp));
+
+    // keep if ((!contains_zero && old_ts < tstp) ||
+    //                (contains_zero && first_tp <= tstp))
+    auto erase_cond = [this, old_ts, first_tp](const auto &entry) {
+      size_t tstp = entry.second;
+      return !((!contains_zero && old_ts < tstp) ||
+               (contains_zero && first_tp <= tstp));
+    };
+    absl::erase_if(a2_it->second, erase_cond);
+    res_acc.push_back(table_from_map(a2_it->second));
     auto a2_it_nxt = a2_map.find(first_tp + 1);
     assert(a2_it_nxt != a2_map.end());
+    // fmt::print("{}\n", a2_it->second.size());
     combine_max(a2_it->second, a2_it_nxt->second);
     a2_map.erase(a2_it);
   }

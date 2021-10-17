@@ -19,10 +19,13 @@ event_table since_impl::eval(event_table &tab_l, event_table &tab_r,
 }
 
 void since_impl::cleanup(size_t before_ts) {
+  /*
   auto cleanup_fn = [before_ts](const auto &entry) {
     return entry.second <= before_ts;
   };
   absl::erase_if(tuple_since, cleanup_fn);
+   */
+  // TODO: use hash caching
 }
 
 void since_impl::drop_too_old(size_t ts) {

@@ -413,7 +413,14 @@ event_table_vec MState::MSince::eval(const database &db, size_t ts) {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
     ts_buf.pop_front();
-    return impl.eval(tab_l, tab_r, new_ts);
+    fmt::print(
+      "calling since_impl eval with new ts: {}, tab_l: {}, tab_r: {}\n", new_ts,
+      tab_l, tab_r);
+    auto ret = impl.eval(tab_l, tab_r, new_ts);
+    fmt::print("since_impl returned: {}\n", ret);
+    fmt::print("since_impl state is:\n");
+    impl.print_state();
+    return ret;
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
@@ -427,15 +434,15 @@ event_table_vec MState::MUntil::eval(const database &db, size_t ts) {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
     ts_buf.pop_front();
-    //fmt::print("calling add_tables with ts {}\n", new_ts);
+    // fmt::print("calling add_tables with ts {}\n", new_ts);
     impl.add_tables(tab_l, tab_r, new_ts);
-    //fmt::print("state after add_tables():\n");
-    //impl.print_state();
+    // fmt::print("state after add_tables():\n");
+    // impl.print_state();
     new_ts = ts_buf.empty() ? new_ts : ts_buf.front();
-    //fmt::print("calling eval with ts {}\n", new_ts);
+    // fmt::print("calling eval with ts {}\n", new_ts);
     auto bla = impl.eval(new_ts);
-    //fmt::print("state after eval():\n");
-    //impl.print_state();
+    // fmt::print("state after eval():\n");
+    // impl.print_state();
     return bla;
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,

@@ -28,13 +28,12 @@ private:
   using a2_elem_t = a1_map_t;
   using a2_map_t = absl::flat_hash_map<size_t, a2_elem_t>;
 
-  void combine_max(const a2_elem_t &mapping1, a2_elem_t &mapping2);
+  void combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2);
   void update_a2_inner_map(size_t override_tp, const event &e,
                            size_t new_ts_tp);
   void update_a2_map(size_t new_ts, const event_table &tab_r);
   void update_a1_map(const event_table &tab_l);
-  event_table table_from_filtered_map(const a2_elem_t &mapping, size_t ts,
-                                      size_t first_tp);
+  event_table table_from_map(const a2_elem_t &mapping);
 
   void shift(size_t new_ts);
 

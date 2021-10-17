@@ -16,6 +16,8 @@ public:
                fo::Interval inter);
   event_table eval(event_table &tab_l, event_table &tab_r, size_t ts);
 
+  void print_state();
+
 private:
   using table_buf = boost::container::devector<std::pair<size_t, event_table>>;
   using tuple_buf =
@@ -26,7 +28,6 @@ private:
   void add_new_table(event_table &&tab_r, size_t ts);
   event_table produce_result();
   void cleanup(size_t before_ts);
-  void print_state();
 
   bool left_negated;
   size_t nfvs, last_cleanup;
