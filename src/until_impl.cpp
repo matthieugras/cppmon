@@ -23,7 +23,8 @@ event_table_vec until_impl::eval(size_t new_ts) {
   return ret;
 }
 
-void until_impl::update_a2_inner_map(size_t tp, const event &e,
+void until_impl::update_a2_inner_map(size_t tp,
+                                     const event &e,
                                      size_t new_ts_tp) {
   auto a2_it = a2_map.find(tp);
   if (a2_it == a2_map.end()) {
@@ -50,7 +51,7 @@ void until_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
   for (const auto &e : tab_r) {
     if (contains_zero)
       update_a2_inner_map(curr_tp, e, new_ts_tp);
-    const auto a1_it = a1_map.find(filter_row(comm_idx_r, e));
+    const auto a1_it = a1_map.find(event_table::filter_row(comm_idx_r, e));
     size_t override_tp;
     if (a1_it == a1_map.end()) {
       if (left_negated)
