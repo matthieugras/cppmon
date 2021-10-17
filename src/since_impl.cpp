@@ -3,7 +3,8 @@
 namespace monitor::detail {
 since_impl::since_impl(bool left_negated, size_t nfvs,
                        std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : left_negated(left_negated), nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)), inter(inter) {}
+    : left_negated(left_negated), nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)),
+      inter(inter) {}
 
 event_table since_impl::eval(event_table &tab_l, event_table &tab_r,
                              size_t new_ts) {
