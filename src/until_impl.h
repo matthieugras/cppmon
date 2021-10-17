@@ -6,7 +6,6 @@
 #include <boost/container/devector.hpp>
 #include <event_data.h>
 #include <formula.h>
-#include <hash_cache.h>
 #include <monitor_types.h>
 #include <table.h>
 #include <vector>
@@ -17,14 +16,15 @@ namespace monitor::detail {
 class until_impl {
 public:
   until_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
-             fo::Interval inter);
+               fo::Interval inter);
   event_table_vec eval(size_t new_ts);
   void add_tables(event_table &tab_l, event_table &tab_r, size_t new_ts);
   void print_state();
 
 private:
+  using tuple_t = std::vector<common::event_data>;
   using ts_buf_t = boost::container::devector<size_t>;
-  using a1_map_t = absl::flat_hash_map<event_table::row_t, size_t>;
+  using a1_map_t = absl::flat_hash_map<tuple_t, size_t>;
   using a2_elem_t = a1_map_t;
   using a2_map_t = absl::flat_hash_map<size_t, a2_elem_t>;
 

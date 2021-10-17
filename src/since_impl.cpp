@@ -67,9 +67,9 @@ void since_impl::join(event_table &tab_l) {
   auto hash_set = event_table::hash_all_destructive(tab_l);
   auto erase_cond = [this, &hash_set](const auto &tup) {
     if (left_negated)
-      return hash_set.contains(event_table::filter_row(comm_idx_r, tup.first));
+      return hash_set.contains(filter_row(comm_idx_r, tup.first));
     else
-      return !hash_set.contains(event_table::filter_row(comm_idx_r, tup.first));
+      return !hash_set.contains(filter_row(comm_idx_r, tup.first));
   };
   absl::erase_if(tuple_since, erase_cond);
   absl::erase_if(tuple_in, erase_cond);

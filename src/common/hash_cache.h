@@ -11,21 +11,17 @@ class hash_cached {
   friend ::fmt::formatter<hash_cached<T>>;
 
 public:
-  hash_cached() : key_(T()), hash_(absl::Hash<T>()(key_)) {}
+  hash_cached() : key_(T()), hash_(absl::Hash<T>(key_)) {}
 
-  hash_cached(const T &key) : key_(key), hash_(absl::Hash<T>()(key_)) {}
-  hash_cached(T &&key) : key_(std::move(key)), hash_(absl::Hash<T>()(key_)) {}
+  hash_cached(const T &key) : key_(key), hash_(absl::Hash<T>(key_)) {}
+  hash_cached(T &&key) : key_(std::move(key)), hash_(absl::Hash<T>(key_)) {}
 
-  T const &key() const { return key_; }
+  operator hash_cached<T> const &() const { return key_; }
 
   hash_cached(hash_cached<T> &&) noexcept = default;
   hash_cached(hash_cached<T> const &) = default;
   hash_cached<T> &operator=(hash_cached<T> &&) = default;
   hash_cached<T> &operator=(hash_cached<T> const &) = default;
-
-  T move_key_out() {
-    return std::move(key_);
-  }
 
   friend bool operator==(const hash_cached<T> &lhs, const hash_cached<T> &rhs) {
     return lhs.key_ == rhs.key_;

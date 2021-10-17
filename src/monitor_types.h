@@ -14,7 +14,7 @@ using event_table_vec = std::vector<event_table>;
 using satisfactions = std::vector<
   std::tuple<size_t, size_t, std::vector<std::vector<common::event_data>>>>;
 using database = parse::database;
-using event = event_table::row_t;
+using event = std::vector<common::event_data>;
 using binary_buffer = common::binary_buffer<event_table>;
 }// namespace monitor
 

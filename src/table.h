@@ -9,7 +9,6 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
-#include <hash_cache.h>
 #include <iterator>
 #include <memory>
 #include <tuple>
@@ -56,28 +55,27 @@ vector<size_t> find_permutation(const table_layout &l1, const table_layout &l2);
 vector<size_t> id_permutation(size_t n);
 
 template<typename T>
+vector<T> filter_row(const vector<size_t> &keep_idxs, const vector<T> &row) {
+  vector<T> filtered_row;
+  filtered_row.reserve(keep_idxs.size());
+  std::transform(keep_idxs.cbegin(), keep_idxs.cend(),
+                 std::back_inserter(filtered_row),
+                 [&row](size_t idx) { return row[idx]; });
+  return filtered_row;
+}
+
+template<typename T>
 class table {
   // friend struct fmt::formatter<table<T>>;
 
 public:
-  using raw_row = vector<T>;
-  using row_t = common::hash_cached<raw_row>;
-  using data_t = flat_hash_set<row_t>;
+  // Forward the iterators of the raw hashset
+  using iterator = typename flat_hash_set<vector<T>>::iterator;
+  using const_iterator = typename flat_hash_set<vector<T>>::const_iterator;
+  using data_t = flat_hash_set<vector<T>>;
   using data_t_ptr = typename data_t::const_pointer;
-  using iterator = typename data_t::iterator;
-  using const_iterator = typename data_t::const_iterator;
-  using join_hash_map = flat_hash_map<row_t, vector<data_t_ptr>>;
-  using join_hash_set = flat_hash_set<row_t>;
-
-  static row_t filter_row(const vector<size_t> &keep_idxs, const row_t &row) {
-    vector<T> filtered_row_inner;
-    filtered_row_inner.reserve(keep_idxs.size());
-    const auto &raw_row = row.key();
-    std::transform(keep_idxs.cbegin(), keep_idxs.cend(),
-                   std::back_inserter(filtered_row_inner),
-                   [&raw_row](size_t idx) { return raw_row[idx]; });
-    return std::move(filtered_row_inner);
-  }
+  using join_hash_map = flat_hash_map<vector<T>, vector<data_t_ptr>>;
+  using join_hash_set = flat_hash_set<vector<T>>;
 
   static join_hash_map compute_join_hash_map(const table<T> &tab,
                                              const vector<size_t> &idxs) {
@@ -164,24 +162,14 @@ public:
 
   void reserve(size_t n) { data_.reserve(n); }
 
-  void add_row(const row_t &row) {
-    assert(row.key().size() == ncols_);
+  void add_row(const vector<T> &row) {
+    assert(row.size() == ncols_);
     data_.insert(row);
   }
 
-  void add_row(row_t &&row) {
-    assert(row.key().size() == ncols_);
+  void add_row(vector<T> &&row) {
+    assert(row.size() == ncols_);
     data_.insert(std::move(row));
-  }
-
-  void add_row(const raw_row &row) {
-    assert(row.size() == ncols_);
-    data_.insert(row_t(row));
-  }
-
-  void add_row(raw_row &&row) {
-    assert(row.size() == ncols_);
-    data_.insert(row_t(std::move(row)));
   }
 
   void drop_col(size_t idx) {
@@ -191,8 +179,7 @@ public:
     data_t tmp_cp = data_;
     data_.clear();
     data_.reserve(tmp_cp.size());
-    for (const auto &hashed_row : tmp_cp) {
-      const auto &row = hashed_row.key();
+    for (const auto &row : tmp_cp) {
       vector<T> tmp_vec;
       tmp_vec.reserve(n - 1);
       for (size_t i = 0; i < n; ++i) {
@@ -209,9 +196,8 @@ public:
     vector<vector<T>> verdicts;
     verdicts.reserve(tab_size());
     for (const auto &row : data_) {
-      assert(row.key().size() == ncols_);
-      auto filtered_row = filter_row(permutation, row);
-      verdicts.push_back(filtered_row.move_key_out());
+      assert(row.size() == ncols_);
+      verdicts.push_back(filter_row(permutation, row));
     }
     return verdicts;
   }
@@ -233,9 +219,9 @@ public:
       if (it == hash_map.end())
         continue;
       for (const auto &row2_ptr : it->second) {
-        vector<T> new_row = row.key();
+        vector<T> new_row = row;
         new_row.reserve(new_row.size() + info.keep_idx2.size());
-        auto snd_part = filter_row(info.keep_idx2, *row2_ptr).move_key_out();
+        auto snd_part = filter_row(info.keep_idx2, *row2_ptr);
         new_row.insert(new_row.cend(), snd_part.cbegin(), snd_part.cend());
         new_tab.data_.insert(std::move(new_row));
       }
@@ -301,6 +287,7 @@ private:
 }// namespace detail
 
 using detail::anti_join_info;
+using detail::filter_row;
 using detail::find_permutation;
 using detail::get_anti_join_info;
 using detail::get_join_info;

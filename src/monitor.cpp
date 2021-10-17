@@ -242,8 +242,8 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
   return var2::visit(visitor1, formula.val);
 }
 
-optional<event> MState::MPred::match(const event &event) const {
-  const auto &event_args = event.key();
+optional<vector<event_data>>
+MState::MPred::match(const vector<event_data> &event_args) const {
   vector<event_data> res;
   res.reserve(nfvs);
   assert(event_args.size() == pred_args.size());
@@ -332,8 +332,7 @@ event_table_vec MState::MAndRel::eval(const database &db, size_t ts) {
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
   auto filter_fn = [this](const auto &row) {
-    auto l_res = l.eval(var_2_idx, row.key()),
-         r_res = r.eval(var_2_idx, row.key());
+    auto l_res = l.eval(var_2_idx, row), r_res = r.eval(var_2_idx, row);
     bool ret;
     if (cst_type == CST_EQ)
       ret = l_res == r_res;
