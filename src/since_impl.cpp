@@ -80,22 +80,22 @@ static void cache_friendly_erase(F f, C &c) {
 
 void since_impl::join(event_table &tab_l) {
   auto hash_set = event_table::hash_all_destructive(tab_l);
-  auto erase_cond = [this, &hash_set](const auto &tup) {
-    if (left_negated)
-      return hash_set.contains(filter_row(comm_idx_r, tup.first));
-    else
-      return !hash_set.contains(filter_row(comm_idx_r, tup.first));
-  };
-  cache_friendly_erase(erase_cond, tuple_since);
-  cache_friendly_erase(erase_cond, tuple_in);
   /*auto erase_cond = [this, &hash_set](const auto &tup) {
     if (left_negated)
       return hash_set.contains(filter_row(comm_idx_r, tup.first));
     else
       return !hash_set.contains(filter_row(comm_idx_r, tup.first));
   };
+  cache_friendly_erase(erase_cond, tuple_since);
+  cache_friendly_erase(erase_cond, tuple_in);*/
+  auto erase_cond = [this, &hash_set](const auto &tup) {
+    if (left_negated)
+      return hash_set.contains(filter_row(comm_idx_r, tup.first));
+    else
+      return !hash_set.contains(filter_row(comm_idx_r, tup.first));
+  };
   absl::erase_if(tuple_since, erase_cond);
-  absl::erase_if(tuple_in, erase_cond);*/
+  absl::erase_if(tuple_in, erase_cond);
 }
 
 void since_impl::add_new_table(event_table &&tab_r, size_t ts) {

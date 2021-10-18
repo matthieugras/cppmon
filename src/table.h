@@ -71,8 +71,8 @@ void for_each_cached(F f, const C &c) {
     nxt_it++;
 
     if (nxt_it != c.cend()) {
-      __builtin_prefetch(nxt_it->data());
-      __builtin_prefetch(nxt_it->data() + 4);
+      __builtin_prefetch(nxt_it->data(), 0, 1);
+      __builtin_prefetch(nxt_it->data() + 4, 0, 1);
     }
 
     f(*it);
