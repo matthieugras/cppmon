@@ -44,7 +44,7 @@ event_table_vec MState::eval(const database &db, size_t ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
-                                   MOr, MNext, MPrev, MSince, MUntil>) {
+                                   MOr, MNext, MPrev, MSince, MOnce, MUntil>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -196,6 +196,26 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
           rec_layout};
 }
 
+MState::init_pair MState::init_since_state(const fo::Formula::since_t &arg) {
+  if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&arg.phil->val)) {
+    const auto *l_val = ptr->l.get_if_const(), *r_val = ptr->r.get_if_const();
+    if (l_val && r_val) {
+      const auto *l_data = l_val->get_if_int(), *r_data = r_val->get_if_int();
+      if (l_data && r_data && *l_data == 0 && *r_data == 0) {
+        auto [r_state, r_layout] = init_mstate(*arg.phir);
+        auto impl =
+          since_impl(false, r_layout.size(), r_layout, arg.inter, true);
+        return {MOnce{{}, uniq(std::move(r_state)), std::move(impl)}, r_layout};
+      }
+    }
+  }
+  return init_since_until(arg);
+}
+
+MState::init_pair MState::init_until_state(const fo::Formula::until_t &arg) {
+  return init_since_until(arg);
+}
+
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -230,11 +250,10 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       return init_prev_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::next_t>) {
       return init_next_state(arg);
-    } else if constexpr (any_type_equal_v<T, fo::Formula::since_t,
-                                          fo::Formula::until_t>) {
-      return init_since_until(arg);
+    } else if constexpr (is_same_v<T, fo::Formula::since_t>) {
+      return init_since_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::until_t>) {
-      throw not_implemented_error();
+      return init_until_state(arg);
     } else {
       throw std::runtime_error("not safe");
     }
@@ -416,15 +435,28 @@ event_table_vec MState::MSince::eval(const database &db, size_t ts) {
     /*fmt::print(
       "calling since_impl eval with new ts: {}, tab_l: {}, tab_r: {}\n", new_ts,
       tab_l, tab_r);*/
-    auto ret = impl.eval(tab_l, tab_r, new_ts);
-    //fmt::print("since_impl returned: {}\n", ret);
-    //fmt::print("since_impl state is:\n");
-    //impl.print_state();
+    auto ret = impl.eval(&tab_l, tab_r, new_ts);
+    // fmt::print("since_impl returned: {}\n", ret);
+    // fmt::print("since_impl state is:\n");
+    // impl.print_state();
     return ret;
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
   return ret;
+}
+
+event_table_vec MState::MOnce::eval(const database &db, size_t ts) {
+  ts_buf.push_back(ts);
+  auto rec_tabs = r_state->eval(db, ts);
+  event_table_vec res;
+  res.reserve(rec_tabs.size());
+  for (auto &tab : rec_tabs) {
+    assert(!ts_buf.empty());
+    size_t new_ts = ts_buf.front();
+    res.push_back(impl.eval(nullptr, tab, new_ts));
+  }
+  return res;
 }
 
 event_table_vec MState::MUntil::eval(const database &db, size_t ts) {

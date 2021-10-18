@@ -2,14 +2,18 @@
 
 namespace monitor::detail {
 since_impl::since_impl(bool left_negated, size_t nfvs,
-                       std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : left_negated(left_negated), nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)),
-      inter(inter) {}
+                       std::vector<size_t> comm_idx_r, fo::Interval inter,
+                       bool is_once)
+    : left_negated(left_negated), is_once(is_once), nfvs(nfvs),
+      comm_idx_r(std::move(comm_idx_r)), inter(inter) {}
 
-event_table since_impl::eval(event_table &tab_l, event_table &tab_r,
+event_table since_impl::eval(event_table *tab_l, event_table &tab_r,
                              size_t new_ts) {
   add_new_ts(new_ts);
-  join(tab_l);
+  if (!is_once) {
+    assert(tab_l != nullptr);
+    join(*tab_l);
+  }
   add_new_table(std::move(tab_r), new_ts);
   return produce_result();
 }
@@ -60,6 +64,20 @@ void since_impl::add_new_ts(size_t ts) {
   }
 }
 
+template<typename F, typename C>
+static void cache_friendly_erase(F f, C &c) {
+  for (auto it = c.begin(); it != c.end();) {
+    auto copy_it = it++;
+    if (it != c.end()) {
+      __builtin_prefetch(it->first.data());
+      __builtin_prefetch(it->first.data() + 4);
+    }
+    if (f(*copy_it)) {
+      c.erase(copy_it);
+    }
+  }
+}
+
 void since_impl::join(event_table &tab_l) {
   auto hash_set = event_table::hash_all_destructive(tab_l);
   auto erase_cond = [this, &hash_set](const auto &tup) {
@@ -68,8 +86,16 @@ void since_impl::join(event_table &tab_l) {
     else
       return !hash_set.contains(filter_row(comm_idx_r, tup.first));
   };
+  cache_friendly_erase(erase_cond, tuple_since);
+  cache_friendly_erase(erase_cond, tuple_in);
+  /*auto erase_cond = [this, &hash_set](const auto &tup) {
+    if (left_negated)
+      return hash_set.contains(filter_row(comm_idx_r, tup.first));
+    else
+      return !hash_set.contains(filter_row(comm_idx_r, tup.first));
+  };
   absl::erase_if(tuple_since, erase_cond);
-  absl::erase_if(tuple_in, erase_cond);
+  absl::erase_if(tuple_in, erase_cond);*/
 }
 
 void since_impl::add_new_table(event_table &&tab_r, size_t ts) {
@@ -94,8 +120,20 @@ void since_impl::add_new_table(event_table &&tab_r, size_t ts) {
 event_table since_impl::produce_result() {
   event_table tab(nfvs);
   tab.reserve(tuple_in.size());
-  for (const auto &kv : tuple_in)
-    tab.add_row(kv.first);
+  for (auto it = tuple_in.cbegin(); it != tuple_in.cend();) {
+    auto nxt_it = it;
+    nxt_it++;
+    if (nxt_it != tuple_in.cend()) {
+      __builtin_prefetch(nxt_it->first.data());
+      __builtin_prefetch(nxt_it->first.data() + 4);
+      auto nxt_nxt_it = nxt_it;
+      nxt_nxt_it++;
+      if (nxt_nxt_it != tuple_in.cend())
+        __builtin_prefetch(nxt_nxt_it->first.data());
+    }
+    tab.add_row(it->first);
+    it = nxt_it;
+  }
   return tab;
 }
 

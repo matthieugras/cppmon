@@ -47,10 +47,14 @@ void until_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
     new_ts_tp = new_ts - std::min((inter.get_lower() - 1), new_ts);
   assert(curr_tp >= ts_buf.size());
   size_t first_tp = curr_tp - ts_buf.size();
-  for (const auto &e : tab_r) {
+  for (auto e_it = tab_r.cbegin(); e_it != tab_r.cend(); e_it++) {
+    if (e_it != tab_r.cend()) {
+      __builtin_prefetch(e_it->data());
+      __builtin_prefetch(e_it->data() + 4);
+    }
     if (contains_zero)
-      update_a2_inner_map(curr_tp, e, new_ts_tp);
-    const auto a1_it = a1_map.find(filter_row(comm_idx_r, e));
+      update_a2_inner_map(curr_tp, *e_it, new_ts_tp);
+    const auto a1_it = a1_map.find(filter_row(comm_idx_r, *e_it));
     size_t override_tp;
     if (a1_it == a1_map.end()) {
       if (left_negated)
@@ -63,7 +67,7 @@ void until_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
       else
         override_tp = std::max(first_tp, a1_it->second);
     }
-    update_a2_inner_map(override_tp, e, new_ts_tp);
+    update_a2_inner_map(override_tp, *e_it, new_ts_tp);
   }
   assert(!a2_map.contains(curr_tp + 1));
   a2_map.insert_or_assign(curr_tp + 1, a2_elem_t());

@@ -64,6 +64,21 @@ vector<T> filter_row(const vector<size_t> &keep_idxs, const vector<T> &row) {
   return filtered_row;
 }
 
+template <typename F, typename C>
+void for_each_cached(F f, const C &c) {
+  for (auto it = c.cbegin(); it != c.cend(); ++it) {
+    auto nxt_it = it;
+    nxt_it++;
+
+    if (nxt_it != c.cend()) {
+      __builtin_prefetch(nxt_it->data());
+      __builtin_prefetch(nxt_it->data() + 4);
+    }
+
+    f(*it);
+  }
+}
+
 template<typename T>
 class table {
   // friend struct fmt::formatter<table<T>>;

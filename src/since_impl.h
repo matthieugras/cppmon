@@ -13,8 +13,8 @@ namespace monitor::detail {
 class since_impl {
 public:
   since_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
-             fo::Interval inter);
-  event_table eval(event_table &tab_l, event_table &tab_r, size_t ts);
+             fo::Interval inter, bool is_once = false);
+  event_table eval(event_table *tab_l, event_table &tab_r, size_t ts);
 
   void print_state();
 
@@ -31,7 +31,7 @@ private:
   void add_new_table(event_table &&tab_r, size_t ts);
   event_table produce_result();
 
-  bool left_negated;
+  bool left_negated, is_once;
   size_t nfvs;
   std::vector<size_t> comm_idx_r;
   fo::Interval inter;

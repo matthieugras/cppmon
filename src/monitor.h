@@ -171,6 +171,14 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
+    struct MOnce {
+      devector<size_t> ts_buf;
+      ptr_type<MState> r_state;
+      since_impl impl;
+
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
     struct MUntil {
       binary_buffer buf;
       devector<size_t> ts_buf;
@@ -181,7 +189,7 @@ namespace detail {
     };
 
     using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
-                             MAndRel, MAndAssign, MAnd, MSince, MUntil>;
+                             MAndRel, MAndAssign, MAnd, MSince, MOnce, MUntil>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -206,6 +214,12 @@ namespace detail {
     static init_pair init_next_state(const fo::Formula::next_t &arg);
 
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
+
+    static init_pair init_since_state(const fo::Formula::since_t &arg);
+
+    static init_pair init_once_state(const fo::Formula::since_t &arg);
+
+    static init_pair init_until_state(const fo::Formula::until_t &arg);
 
     template<typename T>
     static std::enable_if_t<
