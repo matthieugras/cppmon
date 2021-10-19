@@ -26,10 +26,10 @@ private:
   using ts_buf_t = boost::container::devector<size_t>;
   using a1_map_t = absl::flat_hash_map<tuple_t, size_t>;
   using a2_elem_t = a1_map_t;
-  using a2_map_t = absl::flat_hash_map<size_t, a2_elem_t>;
+  using a2_map_t = boost::container::devector<a2_elem_t>;
 
   void combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2);
-  void update_a2_inner_map(size_t override_tp, const event &e,
+  void update_a2_inner_map(size_t idx, const event &e,
                            size_t new_ts_tp);
   void update_a2_map(size_t new_ts, const event_table &tab_r);
   void update_a1_map(const event_table &tab_l);
@@ -38,12 +38,12 @@ private:
   void shift(size_t new_ts);
 
   bool left_negated, contains_zero;
-  size_t curr_tp, nfvs;
+  size_t first_tp, curr_tp, nfvs;
   std::vector<size_t> comm_idx_r;
   fo::Interval inter;
   ts_buf_t ts_buf;
   a1_map_t a1_map;
-  // I don't think think that a2_map has to be a map if we keep track
+  // I don't think that a2_map has to be a map if we keep track
   // of the lowest index
   a2_map_t a2_map;
   event_table_vec res_acc;
