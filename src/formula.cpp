@@ -457,6 +457,18 @@ size_t Formula::degree() const {
   return this_fvs.size();
 }
 
+bool Formula::is_always_true() const {
+  if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&val)) {
+    const auto *l_val = ptr->l.get_if_const(), *r_val = ptr->r.get_if_const();
+    if (l_val && r_val) {
+      const auto *l_data = l_val->get_if_int(), *r_data = r_val->get_if_int();
+      if (l_data && r_data && *l_data == 0 && *r_data == 0)
+        return true;
+    }
+  }
+  return false;
+}
+
 bool Formula::is_constraint() const {
   auto visitor = [](auto &&arg) {
     using T = std::decay_t<decltype(arg)>;

@@ -174,7 +174,7 @@ namespace detail {
     struct MOnce {
       devector<size_t> ts_buf;
       ptr_type<MState> r_state;
-      since_impl impl;
+      once_impl impl;
 
       event_table_vec eval(const database &db, size_t ts);
     };
@@ -188,8 +188,17 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
-    using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
-                             MAndRel, MAndAssign, MAnd, MSince, MOnce, MUntil>;
+    struct MEventually {
+      devector<size_t> ts_buf;
+      ptr_type<MState> r_state;
+      eventually_impl impl;
+
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
+    using val_type =
+      variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg, MAndRel,
+              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -215,22 +224,24 @@ namespace detail {
 
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
 
-    static init_pair init_since_state(const fo::Formula::since_t &arg);
-
-    static init_pair init_once_state(const fo::Formula::since_t &arg);
-
-    static init_pair init_until_state(const fo::Formula::until_t &arg);
-
     template<typename T>
     static std::enable_if_t<
       any_type_equal_v<T, fo::Formula::until_t, fo::Formula::since_t>,
       init_pair>
     init_since_until(const T &arg) {
-      using St = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
-                                    MSince, MUntil>;
-      using Impl = std::conditional_t<std::is_same_v<T, fo::Formula::since_t>,
-                                      since_impl, until_impl>;
+      using std::conditional_t;
+      constexpr bool cond = std::is_same_v<T, fo::Formula::since_t>;
+      using St = conditional_t<cond, MSince, MUntil>;
+      using StTrue = conditional_t<cond, MOnce, MEventually>;
+      using Impl = conditional_t<cond, since_impl, until_impl>;
+      using ImplTrue = conditional_t<cond, once_impl, eventually_impl>;
+
       auto [r_state, r_layout] = init_mstate(*arg.phir);
+      if (arg.phil->is_always_true()) {
+        auto impl = ImplTrue(r_layout.size(), arg.inter);
+        return {StTrue{{}, uniq(std::move(r_state)), std::move(impl)},
+                r_layout};
+      }
       ptr_type<MState> l_state;
       table_layout l_layout;
       bool left_negated = false;
@@ -251,7 +262,7 @@ namespace detail {
                  {},
                  std::move(l_state),
                  uniq(std::move(r_state)),
-                 impl},
+                 std::move(impl)},
               std::move(r_layout)};
     }
 

@@ -2,29 +2,38 @@
 #include <until_impl.h>
 
 namespace monitor::detail {
-until_impl::until_impl(bool left_negated, size_t nfvs,
-                       std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : left_negated(left_negated), contains_zero(inter.contains(0)), first_tp(0),
-      curr_tp(0), nfvs(nfvs), comm_idx_r(std::move(comm_idx_r)), inter(inter) {
+until_impl_base::until_impl_base(size_t nfvs, fo::Interval inter)
+    : contains_zero(inter.contains(0)), first_tp(0), curr_tp(0), nfvs(nfvs),
+      inter(inter) {
   a2_map.emplace(0, a2_elem_t());
 }
 
-void until_impl::print_state() {
-  fmt::print("UNTIL "
-             "state\ncurr_tp:{}\nts_buf:{}\na1_map:{}\na2_map:{}\nres_acc:{}"
-             "\nEND_STATE\n",
-             curr_tp, ts_buf, a1_map, a2_map, res_acc);
-}
-
-event_table_vec until_impl::eval(size_t new_ts) {
+event_table_vec until_impl_base::eval(size_t new_ts) {
   shift(new_ts);
   event_table_vec ret;
   swap(ret, res_acc);
   return ret;
 }
 
-void until_impl::update_a2_inner_map(size_t idx, const event &e,
-                                     size_t new_ts_tp) {
+event_table until_impl_base::table_from_map(const a2_elem_t &mapping) {
+  event_table res_tab(nfvs);
+  for (const auto &entry : mapping)
+    res_tab.add_row(entry.first);
+  return res_tab;
+}
+
+void until_impl_base::combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2) {
+  for (const auto &entry : mapping1) {
+    auto mapping2_it = mapping2.find(entry.first);
+    if (mapping2_it == mapping2.end())
+      mapping2.insert(entry);
+    else
+      mapping2_it->second = std::max(mapping2_it->second, entry.second);
+  }
+}
+
+void until_impl_base::update_a2_inner_map(size_t idx, const event &e,
+                                          size_t new_ts_tp) {
   assert(idx < a2_map.size());
   /*auto a2_it = a2_map.find(idx);
   if (a2_it == a2_map.end()) {
@@ -39,6 +48,38 @@ void until_impl::update_a2_inner_map(size_t idx, const event &e,
   else
     nest_it->second = std::max(nest_it->second, new_ts_tp);
   //}
+}
+
+void until_impl_base::shift(size_t new_ts) {
+  for (; !ts_buf.empty(); ts_buf.pop_front(), a2_map.pop_front(), first_tp++) {
+    size_t old_ts = ts_buf.front();
+    assert(new_ts >= old_ts);
+    if (inter.leq_upper(new_ts - old_ts))
+      break;
+    assert(a2_map.size() >= 2);
+    assert(curr_tp >= ts_buf.size());
+    auto erase_cond = [this, old_ts](const auto &entry) {
+      size_t tstp = entry.second;
+      return !((!contains_zero && old_ts < tstp) ||
+               (contains_zero && first_tp <= tstp));
+    };
+    absl::erase_if(a2_map[0], erase_cond);
+    res_acc.push_back(table_from_map(a2_map[0]));
+    combine_max(a2_map[0], a2_map[1]);
+  }
+}
+
+
+until_impl::until_impl(bool left_negated, size_t nfvs,
+                       std::vector<size_t> comm_idx_r, fo::Interval inter)
+    : until_impl_base(nfvs, inter), left_negated(left_negated),
+      comm_idx_r(std::move(comm_idx_r)) {}
+
+void until_impl::print_state() {
+  fmt::print("UNTIL "
+             "state\ncurr_tp:{}\nts_buf:{}\na1_map:{}\na2_map:{}\nres_acc:{}"
+             "\nEND_STATE\n",
+             curr_tp, ts_buf, a1_map, a2_map, res_acc);
 }
 
 void until_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
@@ -99,39 +140,30 @@ void until_impl::add_tables(event_table &tab_l, event_table &tab_r,
   curr_tp++;
 }
 
-event_table until_impl::table_from_map(const a2_elem_t &mapping) {
-  event_table res_tab(nfvs);
-  for (const auto &entry : mapping)
-    res_tab.add_row(entry.first);
-  return res_tab;
+eventually_impl::eventually_impl(size_t nfvs, fo::Interval inter)
+    : until_impl_base(nfvs, inter) {}
+
+void eventually_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
+  size_t new_ts_tp;
+  if (contains_zero)
+    new_ts_tp = curr_tp;
+  else
+    new_ts_tp = new_ts - std::min((inter.get_lower() - 1), new_ts);
+  assert(curr_tp >= ts_buf.size());
+  for (auto e_it = tab_r.cbegin(); e_it != tab_r.cend(); e_it++) {
+    assert(a2_map.size() > 0);
+    if (contains_zero)
+      update_a2_inner_map(a2_map.size() - 1, *e_it, new_ts_tp);
+    update_a2_inner_map(0, *e_it, new_ts_tp);
+  }
+  a2_map.emplace_back();
 }
 
-void until_impl::combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2) {
-  for (const auto &entry : mapping1) {
-    auto mapping2_it = mapping2.find(entry.first);
-    if (mapping2_it == mapping2.end())
-      mapping2.insert(entry);
-    else
-      mapping2_it->second = std::max(mapping2_it->second, entry.second);
-  }
-}
-
-void until_impl::shift(size_t new_ts) {
-  for (; !ts_buf.empty(); ts_buf.pop_front(), a2_map.pop_front(), first_tp++) {
-    size_t old_ts = ts_buf.front();
-    assert(new_ts >= old_ts);
-    if (inter.leq_upper(new_ts - old_ts))
-      break;
-    assert(a2_map.size() >= 2);
-    assert(curr_tp >= ts_buf.size());
-    auto erase_cond = [this, old_ts](const auto &entry) {
-      size_t tstp = entry.second;
-      return !((!contains_zero && old_ts < tstp) ||
-               (contains_zero && first_tp <= tstp));
-    };
-    absl::erase_if(a2_map[0], erase_cond);
-    res_acc.push_back(table_from_map(a2_map[0]));
-    combine_max(a2_map[0], a2_map[1]);
-  }
+void eventually_impl::add_right_table(event_table &tab_r, size_t new_ts) {
+  assert(ts_buf.empty() || new_ts >= ts_buf.back());
+  shift(new_ts);
+  update_a2_map(new_ts, tab_r);
+  ts_buf.push_back(new_ts);
+  curr_tp++;
 }
 }// namespace monitor::detail

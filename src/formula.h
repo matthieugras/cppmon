@@ -175,6 +175,7 @@ public:
   [[nodiscard]] bool is_constraint() const;
   [[nodiscard]] bool is_safe_assignment(const fv_set &vars) const;
   [[nodiscard]] bool is_safe_formula() const;
+  [[nodiscard]] bool is_always_true() const;
 
 
 private:
