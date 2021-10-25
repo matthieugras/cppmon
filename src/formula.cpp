@@ -9,6 +9,25 @@
 namespace fo {
 using std::literals::string_view_literals::operator""sv;
 
+agg_type agg_type_from_json(const json &json_formula) {
+  string_view agg_ty = json_formula.at(0).get<string_view>();
+  if (agg_ty == "Agg_Cnt"sv) {
+    return agg_type::CNT;
+  } else if (agg_ty == "Agg_Min"sv) {
+    return agg_type::MIN;
+  } else if (agg_ty == "Agg_Max"sv) {
+    return agg_type::MAX;
+  } else if (agg_ty == "Agg_Sum"sv) {
+    return agg_type::SUM;
+  } else if (agg_ty == "Agg_Avg"sv) {
+    return agg_type::AVG;
+  } else if (agg_ty == "Agg_Med"sv) {
+    return agg_type::MED;
+  } else {
+    throw std::runtime_error("invalid aggregation type");
+  }
+}
+
 size_t nat_from_json(const json &json_formula) {
   string_view nat_ty = json_formula.at(0).get<string_view>();
   if (nat_ty == "Nat"sv) {
@@ -226,22 +245,23 @@ const event_data *Term::get_if_const() const {
   return var2::get_if<event_data>(&val);
 }
 
+fv_set fvi_single_var(size_t var, size_t num_bound_vars) {
+  if (var >= num_bound_vars)
+    return fv_set({var - num_bound_vars});
+  else
+    return {};
+}
+
 fv_set Term::fvi(size_t num_bound_vars) const {
   auto visitor = [num_bound_vars](auto &&arg) -> fv_set {
     using T = std::decay_t<decltype(arg)>;
 
     if constexpr (std::is_same_v<T, var_t>) {
-      if (arg.idx >= num_bound_vars) {
-        return fv_set({arg.idx - num_bound_vars});
-      } else {
-        return {};
-      }
+      return fvi_single_var(arg.idx, num_bound_vars);
     } else if constexpr (any_type_equal_v<T, plus_t, minus_t, mult_t, div_t,
                                           mod_t>) {
-      auto fvs1 = arg.l->fvi(num_bound_vars),
-           fvs2 = arg.r->fvi(num_bound_vars);
-      fvs1.insert(fvs2.begin(), fvs2.end());
-      return fvs1;
+      auto fvs1 = arg.l->fvi(num_bound_vars), fvs2 = arg.r->fvi(num_bound_vars);
+      return hash_set_union(fvs1, fvs2);
     } else if constexpr (any_type_equal_v<T, uminus_t, f2i_t, i2f_t>) {
       return arg.t->fvi(num_bound_vars);
     } else if constexpr (std::is_same_v<T, event_data>) {
@@ -297,6 +317,11 @@ bool Formula::operator==(const Formula &other) const {
     } else if constexpr (any_type_equal_v<T1, since_t, until_t>) {
       return (arg1.inter == arg2.inter) && ((*arg1.phil) == (*arg2.phil)) &&
              ((*arg1.phir) == (*arg2.phir));
+    } else if constexpr (std::is_same_v<T1, agg_t>) {
+      return (arg1.ty == arg2.ty) && (arg1.res_var == arg2.res_var) &&
+             (arg1.num_bound_vars == arg2.num_bound_vars) &&
+             (arg1.default_value == arg2.default_value) &&
+             (arg1.agg_term == arg2.agg_term) && ((*arg1.phi) == (*arg2.phi));
     } else {
       static_assert(always_false_v<T1>, "not exhaustive");
     }
@@ -348,6 +373,15 @@ Formula Formula::from_json(const json &json_formula) {
     return Formula::Until(Interval::from_json(json_formula.at(2)),
                           Formula::from_json(json_formula.at(1)),
                           Formula::from_json(json_formula.at(3)));
+  } else if (fo_ty == "Agg"sv) {
+    auto res_var = nat_from_json(json_formula.at(1));
+    auto ty = agg_type_from_json(json_formula.at(2).at(0));
+    auto default_value = event_data::from_json(json_formula.at(2).at(1));
+    auto num_bound_vars = nat_from_json(json_formula.at(3));
+    auto agg_term = Term::from_json(json_formula.at(4));
+    auto phi = Formula::from_json(json_formula.at(5));
+    return Formula::Agg(ty, res_var, num_bound_vars, std::move(default_value),
+                        std::move(agg_term), std::move(phi));
   } else {
     throw std::runtime_error("formula type not supported");
   }
@@ -397,6 +431,11 @@ Formula Formula::Since(Interval inter, Formula phil, Formula phir) {
 Formula Formula::Until(Interval inter, Formula phil, Formula phir) {
   return Formula(until_t{inter, uniq(std::move(phil)), uniq(std::move(phir))});
 }
+Formula Formula::Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
+                     event_data default_value, Term agg_term, Formula phi) {
+  return Formula(agg_t{ty, res_var, num_bound_vars, std::move(default_value),
+                       std::move(agg_term), uniq(std::move(phi))});
+}
 
 Formula::val_type Formula::copy_val(const val_type &val) {
   auto visitor = [](auto &&arg) -> val_type {
@@ -412,6 +451,13 @@ Formula::val_type Formula::copy_val(const val_type &val) {
     } else if constexpr (any_type_equal_v<T, since_t, until_t>) {
       return T{arg.inter, uniq(copy_val(arg.phil->val)),
                uniq(copy_val(arg.phir->val))};
+    } else if constexpr (std::is_same_v<T, agg_t>) {
+      return T{arg.ty,
+               arg.res_var,
+               arg.num_bound_vars,
+               arg.default_value,
+               arg.agg_term,
+               uniq(copy_val(arg.phi->val))};
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
@@ -432,17 +478,21 @@ fv_set Formula::fvi(size_t num_bound_vars) const {
       return fv_children;
     } else if constexpr (any_type_equal_v<T, less_t, less_eq_t, eq_t>) {
       auto fvl = arg.l.fvi(num_bound_vars), fvr = arg.r.fvi(num_bound_vars);
-      fvl.insert(fvr.begin(), fvr.end());
-      return fvl;
+      return hash_set_union(fvl, fvr);
     } else if constexpr (any_type_equal_v<T, prev_t, next_t, neg_t>) {
       return arg.phi->fvi(num_bound_vars);
     } else if constexpr (any_type_equal_v<T, and_t, or_t, since_t, until_t>) {
       auto fvl = arg.phil->fvi(num_bound_vars),
            fvr = arg.phir->fvi(num_bound_vars);
-      fvl.insert(fvr.begin(), fvr.end());
-      return fvl;
+      return hash_set_union(fvl, fvr);
     } else if constexpr (is_same_v<T, exists_t>) {
       return arg.phi->fvi(num_bound_vars + 1);
+    } else if constexpr (is_same_v<T, agg_t>) {
+      size_t new_num_bound_vars = num_bound_vars + arg.num_bound_vars;
+      auto fv_trm = arg.agg_term.fvi(new_num_bound_vars),
+           fv_phi = arg.phi->fvi(new_num_bound_vars),
+           fv_res_var = fvi_single_var(arg.res_var, num_bound_vars);
+      return hash_set_union(fv_trm, fv_phi, fv_res_var);
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
@@ -552,6 +602,14 @@ bool Formula::is_safe_formula() const {
         return neg_ptr->is_safe_formula();
       }
       return false;
+    } else if constexpr (std::is_same_v<T, agg_t>) {
+      auto fv_agg_trm = arg.agg_term.fvs(), fv_phi = arg.phi->fvs();
+      bool safe_tmp = arg.phi->is_safe_formula() &&
+                      !fv_phi.contains(arg.res_var + arg.num_bound_vars) &&
+                      is_subset(fv_agg_trm, fv_phi);
+      for (size_t var = 0; var < arg.num_bound_vars; ++var)
+        safe_tmp = safe_tmp && fv_phi.contains(var);
+      return safe_tmp;
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }

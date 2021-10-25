@@ -3,11 +3,11 @@
 
 #include <algorithm>
 #include <boost/hana.hpp>
-#include <stdexcept>
-#include <vector>
-#include <string>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace detail {
 
@@ -34,6 +34,17 @@ bool is_subset(const S &set1, const S &set2) {
   return std::all_of(set1.begin(), set1.end(),
                      [&set2](const auto &elem) { return set2.contains(elem); });
 }
+
+template<typename S, typename... Rest>
+S hash_set_union(const S &s, const Rest &...rest) {
+  S ret_set = s;
+  auto sets_as_tup = hana::make_tuple(rest...);
+  hana::for_each(sets_as_tup, [&ret_set](const auto &s) {
+    ret_set.insert(s.begin(), s.end());
+  });
+  return ret_set;
+}
+
 template<class... Ts>
 struct overloaded : Ts... {
   using Ts::operator()...;
@@ -46,8 +57,9 @@ std::string read_file(const std::filesystem::path &path);
 
 using detail::always_false_v;
 using detail::any_type_equal_v;
+using detail::hash_set_union;
 using detail::is_subset;
-using detail::overloaded;
 using detail::not_implemented_error;
+using detail::overloaded;
 
 #endif

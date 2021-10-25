@@ -39,8 +39,23 @@ namespace {
 }// namespace
 
 
+enum class agg_type
+{
+  CNT,
+  MIN,
+  MAX,
+  SUM,
+  AVG,
+  MED
+};
+
+agg_type agg_type_from_json(const json &json_formula);
+
+
 using name = std::string;
 using fv_set = absl::flat_hash_set<size_t>;
+
+fv_set fvi_single_var(size_t var, size_t num_bound_vars);
 
 size_t nat_from_json(const json &json_formula);
 optional<size_t> enat_from_json(const json &json_formula);
@@ -169,6 +184,8 @@ public:
   static Formula Next(Interval inter, Formula phi);
   static Formula Since(Interval inter, Formula phil, Formula phir);
   static Formula Until(Interval inter, Formula phil, Formula phir);
+  static Formula Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
+                     event_data default_value, Term agg_term, Formula phi);
   [[nodiscard]] Formula *inner_if_neg() const;
   [[nodiscard]] fv_set fvs() const;
   [[nodiscard]] size_t degree() const;
@@ -233,8 +250,19 @@ private:
     Interval inter;
     ptr_type<Formula> phil, phir;
   };
-  using val_type = variant<pred_t, less_t, less_eq_t, eq_t, or_t, and_t,
-                           exists_t, prev_t, next_t, since_t, until_t, neg_t>;
+
+  struct agg_t {
+    agg_type ty;
+    size_t res_var;
+    size_t num_bound_vars;
+    event_data default_value;
+    Term agg_term;
+    ptr_type<Formula> phi;
+  };
+
+  using val_type =
+    variant<pred_t, less_t, less_eq_t, eq_t, or_t, and_t, exists_t, prev_t,
+            next_t, since_t, until_t, neg_t, agg_t>;
   static Formula from_json(const json &json_formula);
   explicit Formula(val_type &&val) noexcept;
   explicit Formula(const val_type &val);

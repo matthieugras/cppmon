@@ -3,6 +3,7 @@
 
 #include <buffers.h>
 #include <event_data.h>
+#include <limits>
 #include <table.h>
 #include <traceparser.h>
 #include <vector>

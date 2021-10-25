@@ -11,6 +11,7 @@ monitor::monitor(const Formula &formula) : curr_tp_(0) {
     if (!layout_fvs.insert(var).second)
       throw std::runtime_error("returned table layout contains duplicates");
   }
+  // fmt::print("layout_fvs: {}, formula_fvs: {}\n", layout_fvs, formula.fvs());
   assert(layout_fvs == formula.fvs());
 #endif
   state_ = MState(std::move(state_tmp));
@@ -45,7 +46,7 @@ event_table_vec MState::eval(const database &db, size_t ts) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
                                    MOr, MNext, MPrev, MSince, MOnce, MUntil,
-                                   MEventually>) {
+                                   MEventually, MAgg>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -197,6 +198,14 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
           rec_layout};
 }
 
+MState::init_pair MState::init_agg_state(const fo::Formula::agg_t &arg) {
+  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
+  auto impl = aggregation_impl(rec_layout, arg.agg_term, arg.default_value,
+                               arg.ty, arg.res_var, arg.num_bound_vars);
+  auto layout = impl.get_layout();
+  return {MAgg{uniq(std::move(rec_state)), std::move(impl)}, std::move(layout)};
+}
+
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -234,6 +243,8 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
     } else if constexpr (any_type_equal_v<T, fo::Formula::since_t,
                                           fo::Formula::until_t>) {
       return init_since_until(arg);
+    } else if constexpr (is_same_v<T, fo::Formula::agg_t>) {
+      return init_agg_state(arg);
     } else {
       throw std::runtime_error("not safe");
     }
@@ -472,6 +483,15 @@ event_table_vec MState::MEventually::eval(const database &db, size_t ts) {
                     std::make_move_iterator(res_tabs_part.begin()),
                     std::make_move_iterator(res_tabs_part.end()));
   }
+  return res_tabs;
+}
+
+event_table_vec MState::MAgg::eval(const database &db, size_t ts) {
+  auto rec_tabs = state->eval(db, ts);
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size());
+  std::transform(rec_tabs.begin(), rec_tabs.end(), std::back_inserter(res_tabs),
+                 [this](auto &tab) { return impl.eval(tab); });
   return res_tabs;
 }
 

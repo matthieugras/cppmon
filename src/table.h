@@ -64,7 +64,7 @@ vector<T> filter_row(const vector<size_t> &keep_idxs, const vector<T> &row) {
   return filtered_row;
 }
 
-template <typename F, typename C>
+template<typename F, typename C>
 void for_each_cached(F f, const C &c) {
   for (auto it = c.cbegin(); it != c.cend(); ++it) {
     auto nxt_it = it;

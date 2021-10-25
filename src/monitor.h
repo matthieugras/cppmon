@@ -3,6 +3,7 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
+#include <aggregation_impl.h>
 #include <algorithm>
 #include <boost/container/devector.hpp>
 #include <boost/variant2/variant.hpp>
@@ -196,9 +197,16 @@ namespace detail {
       event_table_vec eval(const database &db, size_t ts);
     };
 
+    struct MAgg {
+      ptr_type<MState> state;
+      aggregation_impl impl;
+
+      event_table_vec eval(const database &db, size_t ts);
+    };
+
     using val_type =
       variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg, MAndRel,
-              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually>;
+              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually, MAgg>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -223,6 +231,8 @@ namespace detail {
     static init_pair init_next_state(const fo::Formula::next_t &arg);
 
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
+
+    static init_pair init_agg_state(const fo::Formula::agg_t &arg);
 
     template<typename T>
     static std::enable_if_t<

@@ -29,6 +29,7 @@ target_link_libraries(formula
 add_library(monitor STATIC
     monitor_driver.cpp
     monitor.cpp
+    aggregation_impl.cpp
     since_impl.cpp
     until_impl.cpp)
 target_include_directories(monitor PUBLIC

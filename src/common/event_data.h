@@ -36,9 +36,11 @@ public:
   static event_data from_json(const json &json_formula);
   static event_data nan();
 
+  double to_double() const;
   bool operator==(const event_data &other) const;
   bool operator<=(const event_data &other) const;
   bool operator<(const event_data &other) const;
+  bool operator>(const event_data &other) const;
   event_data operator+(const event_data &other) const;
   event_data operator-(const event_data &other) const;
   event_data operator-() const;
@@ -110,7 +112,7 @@ struct [[maybe_unused]] fmt::formatter<common::event_data> {
     if (tab.tag == common::event_data::HOLDS_INT) {
       return format_to(ctx.out(), "{}", tab.i);
     } else if (tab.tag == common::event_data::HOLDS_FLOAT) {
-      return format_to(ctx.out(), "{:.5f}", tab.d);
+      return format_to(ctx.out(), "{:.15e}", tab.d);
     } else {
       return format_to(ctx.out(), "\"{}\"", *tab.s);
     }

@@ -56,6 +56,10 @@ event_data::event_data(event_data &&other) noexcept : event_data() {
   do_move(std::move(other));
 }
 
+bool event_data::operator>(const event_data &other) const {
+  return !(*this <= other);
+}
+
 event_data::~event_data() {
   if (tag == HOLD_STRING) {
     delete s;
@@ -166,6 +170,15 @@ event_data event_data::operator-() const {
 
 event_data event_data::nan() {
   return Float(std::numeric_limits<double>::quiet_NaN());
+}
+
+double event_data::to_double() const {
+  if (tag == HOLDS_INT)
+    return static_cast<double>(i);
+  else if (tag == HOLDS_FLOAT)
+    return d;
+  else
+    return std::numeric_limits<double>::quiet_NaN();
 }
 
 event_data event_data::int_to_float() const {
