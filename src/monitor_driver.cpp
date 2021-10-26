@@ -1,4 +1,5 @@
 #include <cassert>
+#include <database.h>
 #include <fmt/core.h>
 #include <limits>
 #include <monitor.h>
@@ -53,9 +54,11 @@ void monitor_driver::do_monitor() {
   std::string db_str;
   while (std::getline(log_, db_str)) {
     auto [ts, db] = parser_.parse_database(db_str);
-    auto sats = monitor_.step(db, ts);
+    auto sats = monitor_.step(monitor::monitor_db_from_parser_db(std::move(db)),
+                              make_vector(ts));
     print_satisfactions(sats);
   }
-  auto sats_last = monitor_.step({}, std::numeric_limits<size_t>::max());
+  auto sats_last =
+    monitor_.step({}, make_vector(std::numeric_limits<size_t>::max()));
   print_satisfactions(sats_last);
 }

@@ -1,6 +1,7 @@
 #ifndef MFORMULA_H
 #define MFORMULA_H
 
+#include "database.h"
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <aggregation_impl.h>
@@ -49,9 +50,9 @@ namespace detail {
   class monitor;
 
   template<typename F, typename T>
-  event_table_vec apply_recursive_bin_reduction(F f, T &t1, T &t2,
-                                                binary_buffer &buf,
-                                                const database &db, size_t ts) {
+  event_table_vec
+  apply_recursive_bin_reduction(F f, T &t1, T &t2, binary_buffer &buf,
+                                const database &db, const ts_list &ts) {
     auto l_rec_tabs = t1.eval(db, ts), r_rec_tabs = t2.eval(db, ts);
     auto res = buf.template update_and_reduce(l_rec_tabs, r_rec_tabs, f);
     if constexpr (std::is_same_v<decltype(res), event_table_vec>) {
@@ -78,17 +79,17 @@ namespace detail {
     template<typename F, typename T>
     friend event_table_vec
     apply_recursive_bin_reduction(F, T &, T &, binary_buffer &,
-                                  database const &, size_t);
+                                  database const &, ts_list const &);
 
     MState() = default;
     MState &operator=(MState &&other) = default;
 
 
   private:
-    event_table_vec eval(const database &db, size_t ts);
+    event_table_vec eval(const database &db, const ts_list &ts);
     struct MRel {
       event_table tab;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MPred {
@@ -97,7 +98,7 @@ namespace detail {
       vector<Term> pred_args;
       vector<vector<size_t>> var_pos;
       vector<pair<size_t, event_data>> pos_2_cst;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
 
       [[nodiscard]] optional<event> match(const event &event_args) const;
     };
@@ -106,7 +107,7 @@ namespace detail {
       binary_buffer buf;
       ptr_type<MState> l_state, r_state;
       variant<join_info, anti_join_info> op_info;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     // TODO: implement this later together with meval
@@ -123,25 +124,25 @@ namespace detail {
         CST_LESS_EQ
       } cst_type;
       bool cst_neg;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MOr {
       ptr_type<MState> l_state, r_state;
       vector<size_t> r_layout_permutation;
       binary_buffer buf;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MNeg {
       ptr_type<MState> state;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MExists {
       optional<size_t> drop_idx;
       ptr_type<MState> state;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MPrev {
@@ -151,7 +152,7 @@ namespace detail {
       devector<size_t> past_ts;
       ptr_type<MState> state;
       bool is_first;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MNext {
@@ -160,7 +161,7 @@ namespace detail {
       devector<size_t> past_ts;
       ptr_type<MState> state;
       bool is_first;
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MSince {
@@ -169,7 +170,7 @@ namespace detail {
       ptr_type<MState> l_state, r_state;
       since_impl impl;
 
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MOnce {
@@ -177,7 +178,7 @@ namespace detail {
       ptr_type<MState> r_state;
       once_impl impl;
 
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MUntil {
@@ -186,7 +187,7 @@ namespace detail {
       ptr_type<MState> l_state, r_state;
       until_impl impl;
 
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MEventually {
@@ -194,14 +195,14 @@ namespace detail {
       ptr_type<MState> r_state;
       eventually_impl impl;
 
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     struct MAgg {
       ptr_type<MState> state;
       aggregation_impl impl;
 
-      event_table_vec eval(const database &db, size_t ts);
+      event_table_vec eval(const database &db, const ts_list &ts);
     };
 
     using val_type =
@@ -284,7 +285,7 @@ namespace detail {
   public:
     monitor() = default;
     explicit monitor(const Formula &formula);
-    satisfactions step(const database &db, size_t ts);
+    satisfactions step(const database &db, const ts_list &ts);
 
   private:
     MState state_;

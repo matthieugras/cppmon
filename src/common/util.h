@@ -53,6 +53,20 @@ template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 }// namespace detail
 
+template<typename T, typename... Rest>
+auto make_vector(T &&e, Rest &&...rest) {
+  using elem_ty = std::decay_t<T>;
+  constexpr size_t n_elems = 1 + sizeof...(rest);
+  std::vector<elem_ty> ret_vector;
+  ret_vector.reserve(n_elems);
+  ret_vector.push_back(std::forward<elem_ty>(e));
+  boost::hana::for_each(boost::hana::make_tuple(rest...),
+                        [&ret_vector](auto &&elem) {
+                          ret_vector.push_back(std::forward<elem_ty>(elem));
+                        });
+  return ret_vector;
+}
+
 std::string read_file(const std::filesystem::path &path);
 
 using detail::always_false_v;

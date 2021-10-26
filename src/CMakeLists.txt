@@ -31,7 +31,8 @@ add_library(monitor STATIC
     monitor.cpp
     aggregation_impl.cpp
     since_impl.cpp
-    until_impl.cpp)
+    until_impl.cpp
+    database.cpp)
 target_include_directories(monitor PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(monitor
