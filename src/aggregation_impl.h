@@ -10,116 +10,127 @@
 #include <utility>
 #include <vector>
 
-namespace monitor::detail {
-
-template<typename Combiner, typename BufType>
+namespace monitor::detail::agg_base {
+template<typename GroupType>
 class grouped_state {
 public:
-  void add_result(event &group, common::event_data &val) {
-    auto as_combiner = static_cast<Combiner *>(this);
+  grouped_state() {}
+
+  void add_result(const event &group, const common::event_data &val) {
     auto it = groups_.template find(group);
     if (it == groups_.end()) {
-      // fmt::print("adding new element {}\n", val);
-      groups_.template emplace(group, as_combiner->init_group(val));
+      groups_.emplace(group, GroupType(val));
     } else {
-      // fmt::print("combining results {} and {}\n", it->second, val);
-      as_combiner->combine(it->second, val);
+      it->second.add_event(val);
     }
   }
 
-  event_table finalize_table(size_t nfvs) {
-    auto as_combiner = static_cast<Combiner *>(this);
+  event_table finalize_table(size_t nfvs, bool clear_groups = true) {
     event_table res(nfvs);
-    for (auto &[group, combiner_val] : groups_) {
-      auto result_value = as_combiner->finalize_group(combiner_val);
+    for (auto &[group, group_state] : groups_) {
+      auto result_value = group_state.finalize_group();
       event group_cp;
       group_cp.reserve(nfvs);
       group_cp.insert(group_cp.end(), group.cbegin(), group.cend());
       group_cp.push_back(std::move(result_value));
       res.add_row(std::move(group_cp));
     }
-    groups_.clear();
+    if (clear_groups)
+      groups_.clear();
     return res;
   }
 
-private:
-  absl::flat_hash_map<event, BufType> groups_;
+protected:
+  absl::flat_hash_map<event, GroupType> groups_;
 };
 
 class simple_combiner {
 public:
-  using val_type = common::event_data;
-  simple_combiner() {}
-  common::event_data init_group(common::event_data &e) const { return e; }
-  common::event_data finalize_group(common::event_data &e) const { return e; }
+  simple_combiner(const common::event_data &first_event) : res_(first_event) {}
+
+  template<typename H>
+  friend H AbslHashValue(H h, const simple_combiner &arg) {
+    return H::combine(std::move(h), arg.res_);
+  }
+
+  common::event_data finalize_group() const { return res_; }
+
+protected:
+  common::event_data res_;
 };
 
-class max_combiner
-    : public simple_combiner,
-      public grouped_state<max_combiner, typename simple_combiner::val_type> {
+class max_group : public simple_combiner {
 public:
-  max_combiner() {}
+  max_group(const common::event_data &first_event)
+      : simple_combiner(first_event) {}
 
-  void combine(common::event_data &a, common::event_data &b) const {
-    if (b > a)
-      std::swap(a, b);
+  void add_event(const common::event_data &val) {
+    if (val > res_)
+      res_ = val;
   }
 };
 
-class min_combiner
-    : public simple_combiner,
-      public grouped_state<min_combiner, typename simple_combiner::val_type> {
+class min_group : public simple_combiner {
 public:
-  min_combiner() {}
+  min_group(const common::event_data &first_event)
+      : simple_combiner(first_event) {}
 
-  void combine(common::event_data &a, common::event_data &b) const {
-    if (b < a)
-      std::swap(a, b);
+  void add_event(const common::event_data &val) {
+    if (val < res_)
+      res_ = val;
   }
 };
 
-class sum_combiner
-    : public simple_combiner,
-      public grouped_state<sum_combiner, typename simple_combiner::val_type> {
+class sum_group : public simple_combiner {
 public:
-  sum_combiner() {}
+  sum_group(const common::event_data &first_event)
+      : simple_combiner(first_event) {}
 
-  void combine(common::event_data &a, common::event_data &b) const {
-    a = a + b;
-  }
+  void add_event(const common::event_data &val) { res_ = res_ + val; }
 };
 
-class count_combiner : public grouped_state<count_combiner, size_t> {
+class count_group {
 public:
-  count_combiner() {}
+  count_group(const common::event_data &) : counter_(1) {}
 
-  size_t init_group(common::event_data &) const { return 1; }
-
-  common::event_data finalize_group(size_t counter) const {
-    return common::event_data::Int(static_cast<int>(counter));
+  template<typename H>
+  friend H AbslHashValue(H h, const count_group &arg) {
+    return H::combine(std::move(h), arg.counter_);
   }
 
-  void combine(size_t &curr_count, common::event_data &) const { curr_count++; }
+  void add_event(const common::event_data &) { counter_++; }
+
+  common::event_data finalize_group() const {
+    return common::event_data::Int(static_cast<int>(counter_));
+  }
+
+protected:
+  size_t counter_;
 };
 
-class avg_combiner
-    : public grouped_state<avg_combiner,
-                           std::pair<common::event_data, size_t>> {
+class avg_group {
 public:
   using val_type = std::pair<common::event_data, size_t>;
-  avg_combiner() {}
+  avg_group(const common::event_data &first_event)
+      : sum_(first_event.to_double()), counter_(1) {}
 
-  val_type init_group(common::event_data &e) const { return std::pair(e, 1); }
-
-  common::event_data finalize_group(val_type &res) const {
-    return common::event_data::Float(res.first.to_double() /
-                                     static_cast<double>(res.second));
+  template<typename H>
+  friend H AbslHashValue(H h, const avg_group &arg) {
+    return H::combine(std::move(h), arg.sum_, arg.counter_);
   }
 
-  void combine(val_type &a, common::event_data &b) const {
-    a.first = a.first + b;
-    a.second++;
+  void add_event(const common::event_data &val) {
+    sum_ += val.to_double();
+    counter_++;
   }
+
+  common::event_data finalize_group() const {
+    return common::event_data::Float(sum_ / static_cast<double>(counter_));
+  }
+
+protected:
+  double sum_;
+  size_t counter_;
 };
 
 class aggregation_impl {
@@ -131,18 +142,20 @@ public:
   table_layout get_layout() const;
 
 private:
-  using combiner_t =
-    boost::variant2::variant<count_combiner, avg_combiner, max_combiner,
-                             min_combiner, sum_combiner>;
+  using state_t =
+    boost::variant2::variant<grouped_state<count_group>,
+                             grouped_state<avg_group>, grouped_state<max_group>,
+                             grouped_state<min_group>,
+                             grouped_state<sum_group>>;
   common::event_data default_val_;
   std::vector<size_t> group_var_idxs_;
   size_t nfvs_;
   size_t term_var_idx_;
   table_layout res_layout_;
-  combiner_t combiner_;
+  state_t state_;
   bool all_bound_;
 };
 
-}// namespace monitor::detail
+}// namespace monitor::detail::agg_base
 
 #endif

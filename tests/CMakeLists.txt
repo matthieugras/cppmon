@@ -11,7 +11,7 @@ target_include_directories(testexe PRIVATE
 target_link_libraries(testexe
     CONAN_PKG::gtest
     CONAN_PKG::abseil
-    fmt::fmt
+    CONAN_PKG::fmt
     common
     monitor
     formula

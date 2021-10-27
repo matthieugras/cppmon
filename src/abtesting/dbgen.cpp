@@ -126,7 +126,7 @@ dbgen::sub_form_info dbgen::validate_formula_impl(const Formula &formula,
       auto info_sub = validate_formula_impl(*arg.phi, all_fvs);
       return sub_form_info{info_sub.pred_names};
     } else {
-      static_assert(always_false_v<T>, "cannot happen");
+      throw std::runtime_error("unsupported fragment");
     }
   };
   return var2::visit(visitor, formula.val);

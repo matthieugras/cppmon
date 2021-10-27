@@ -200,7 +200,7 @@ namespace detail {
 
     struct MAgg {
       ptr_type<MState> state;
-      aggregation_impl impl;
+      agg_base::aggregation_impl impl;
 
       event_table_vec eval(const database &db, const ts_list &ts);
     };

@@ -9,7 +9,7 @@ add_library(table STATIC table.cpp)
 target_include_directories(table PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(table
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost
     common)
@@ -19,7 +19,7 @@ add_library(formula STATIC formula.cpp)
 target_include_directories(formula PUBLIC
     ${MAIN_INCLUDES})
 target_link_libraries(formula
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost
     CONAN_PKG::nlohmann_json
@@ -30,6 +30,7 @@ add_library(monitor STATIC
     monitor_driver.cpp
     monitor.cpp
     aggregation_impl.cpp
+    temporal_aggregation_impl.cpp
     since_impl.cpp
     until_impl.cpp
     database.cpp)
@@ -54,7 +55,7 @@ if (USE_JEMALLOC)
 endif ()
 
 target_link_libraries(cppmon
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::abseil
     traceparser
     monitor)

@@ -2,7 +2,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace monitor::detail {
+namespace monitor::detail::agg_base {
 aggregation_impl::aggregation_impl(const table_layout &phi_layout,
                                    const fo::Term &agg_term,
                                    common::event_data default_val,
@@ -10,7 +10,7 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
                                    size_t num_bound_vars)
     : default_val_(std::move(default_val)), nfvs_(0),
       term_var_idx_(std::numeric_limits<size_t>::max()),
-      combiner_(min_combiner()), all_bound_(true) {
+      state_(grouped_state<min_group>()), all_bound_(true) {
   const size_t *trm_var_ptr = agg_term.get_if_var();
   if (!trm_var_ptr)
     throw std::runtime_error(
@@ -35,15 +35,15 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
              phi_layout, res_var, num_bound_vars, nfvs_, all_bound_,
              res_layout_);*/
   if (ty == fo::agg_type::SUM)
-    combiner_ = sum_combiner();
+    state_ = grouped_state<sum_group>();
   else if (ty == fo::agg_type::MAX)
-    combiner_ = max_combiner();
+    state_ = grouped_state<max_group>();
   else if (ty == fo::agg_type::MIN)
-    combiner_ = min_combiner();
+    state_ = grouped_state<min_group>();
   else if (ty == fo::agg_type::CNT)
-    combiner_ = count_combiner();
+    state_ = grouped_state<count_group>();
   else if (ty == fo::agg_type::AVG)
-    combiner_ = avg_combiner();
+    state_ = grouped_state<avg_group>();
   else
     throw std::runtime_error("unsupported operation");
 }
@@ -59,12 +59,12 @@ event_table aggregation_impl::eval(event_table &tab) {
         // fmt::print("group is: {}, trm_var_val is: {}\n", group, trm_var_val);
         arg.add_result(group, trm_var_val);
       },
-      combiner_);
+      state_);
   }
   event_table res_tab = boost::variant2::visit(
-    [this](auto &&arg) { return arg.finalize_table(nfvs_); }, combiner_);
+    [this](auto &&arg) { return arg.finalize_table(nfvs_); }, state_);
   return res_tab;
 }
 
 table_layout aggregation_impl::get_layout() const { return res_layout_; }
-}// namespace monitor::detail
+}// namespace monitor::detail::agg_base

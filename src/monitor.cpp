@@ -202,8 +202,9 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
 
 MState::init_pair MState::init_agg_state(const fo::Formula::agg_t &arg) {
   auto [rec_state, rec_layout] = init_mstate(*arg.phi);
-  auto impl = aggregation_impl(rec_layout, arg.agg_term, arg.default_value,
-                               arg.ty, arg.res_var, arg.num_bound_vars);
+  auto impl =
+    agg_base::aggregation_impl(rec_layout, arg.agg_term, arg.default_value,
+                                   arg.ty, arg.res_var, arg.num_bound_vars);
   auto layout = impl.get_layout();
   return {MAgg{uniq(std::move(rec_state)), std::move(impl)}, std::move(layout)};
 }

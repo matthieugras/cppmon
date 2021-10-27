@@ -4,7 +4,7 @@ add_library(traceparser STATIC traceparser.cpp)
 target_include_directories(traceparser PUBLIC
     ${PARSER_INCLUDES})
 target_link_libraries(traceparser
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::boost
     CONAN_PKG::abseil
     foonathan::lexy

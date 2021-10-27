@@ -8,7 +8,7 @@ target_link_libraries(dbgen
     formula
     table
     common
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost)
 
@@ -16,6 +16,6 @@ add_executable(abtest abtesttool.cpp)
 target_include_directories(abtest PRIVATE
     ${AB_TEST_INCLUDES})
 target_link_libraries(abtest
-    fmt::fmt
+    CONAN_PKG::fmt
     CONAN_PKG::abseil
     CONAN_PKG::boost)

@@ -31,11 +31,5 @@ FetchContent_Declare(lexy
 
 FetchContent_MakeAvailable(lexy)
 
-FetchContent_Declare(fmt
-    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG 927dbd134d4f3e616fbda9036d7c99e5fc560ab4)
-
-FetchContent_MakeAvailable(fmt)
-
 add_subdirectory(src)
 add_subdirectory(tests)
