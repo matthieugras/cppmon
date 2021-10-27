@@ -1,5 +1,7 @@
 #include <absl/container/flat_hash_set.h>
 #include <algorithm>
+#include <fmt/core.h>
+#include <fmt/ranges.h>
 #include <formula.h>
 #include <stdexcept>
 #include <type_traits>
@@ -322,6 +324,9 @@ bool Formula::operator==(const Formula &other) const {
              (arg1.num_bound_vars == arg2.num_bound_vars) &&
              (arg1.default_value == arg2.default_value) &&
              (arg1.agg_term == arg2.agg_term) && ((*arg1.phi) == (*arg2.phi));
+    } else if constexpr (std::is_same_v<T1, let_t>) {
+      return (arg1.pred_name == arg2.pred_name) &&
+             ((*arg1.phi) == (*arg2.phi)) && ((*arg1.psi) == (*arg2.psi));
     } else {
       static_assert(always_false_v<T1>, "not exhaustive");
     }
@@ -382,6 +387,11 @@ Formula Formula::from_json(const json &json_formula) {
     auto phi = Formula::from_json(json_formula.at(5));
     return Formula::Agg(ty, res_var, num_bound_vars, std::move(default_value),
                         std::move(agg_term), std::move(phi));
+  } else if (fo_ty == "Let"sv) {
+    auto pred_name = json_formula.at(1).get<std::string>();
+    auto phi = Formula::from_json(json_formula.at(2));
+    auto psi = Formula::from_json(json_formula.at(3));
+    return Formula::Let(std::move(pred_name), std::move(phi), std::move(psi));
   } else {
     throw std::runtime_error("formula type not supported");
   }
@@ -437,6 +447,11 @@ Formula Formula::Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
                        std::move(agg_term), uniq(std::move(phi))});
 }
 
+Formula Formula::Let(std::string pred_name, Formula phi, Formula psi) {
+  return Formula(
+    let_t{std::move(pred_name), uniq(std::move(phi)), uniq(std::move(psi))});
+}
+
 Formula::val_type Formula::copy_val(const val_type &val) {
   auto visitor = [](auto &&arg) -> val_type {
     using T = std::decay_t<decltype(arg)>;
@@ -458,6 +473,9 @@ Formula::val_type Formula::copy_val(const val_type &val) {
                arg.default_value,
                arg.agg_term,
                uniq(copy_val(arg.phi->val))};
+    } else if constexpr (std::is_same_v<T, let_t>) {
+      return T{arg.pred_name, uniq(copy_val(arg.phi->val)),
+               uniq(copy_val(arg.psi->val))};
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
@@ -493,6 +511,8 @@ fv_set Formula::fvi(size_t num_bound_vars) const {
            fv_phi = arg.phi->fvi(new_num_bound_vars),
            fv_res_var = fvi_single_var(arg.res_var, num_bound_vars);
       return hash_set_union(fv_trm, fv_phi, fv_res_var);
+    } else if constexpr (is_same_v<T, let_t>) {
+      return arg.psi->fvi(num_bound_vars);
     } else {
       static_assert(always_false_v<T>, "not exhaustive");
     }
@@ -591,8 +611,6 @@ bool Formula::is_safe_formula() const {
     } else if constexpr (any_type_equal_v<T, exists_t, prev_t, next_t>) {
       return arg.phi->is_safe_formula();
     } else if constexpr (any_type_equal_v<T, since_t, until_t>) {
-      if (!arg.inter.is_bounded())
-        return false;
       const auto &phil = *arg.phil, &phir = *arg.phir;
       if (is_subset(phil.fvs(), phir.fvs()) && phil.is_safe_formula())
         return true;
@@ -602,12 +620,18 @@ bool Formula::is_safe_formula() const {
         return neg_ptr->is_safe_formula();
       }
       return false;
-    } else if constexpr (std::is_same_v<T, agg_t>) {
+    } else if constexpr (is_same_v<T, agg_t>) {
       auto fv_agg_trm = arg.agg_term.fvs(), fv_phi = arg.phi->fvs();
       bool safe_tmp = arg.phi->is_safe_formula() &&
                       !fv_phi.contains(arg.res_var + arg.num_bound_vars) &&
                       is_subset(fv_agg_trm, fv_phi);
       for (size_t var = 0; var < arg.num_bound_vars; ++var)
+        safe_tmp = safe_tmp && fv_phi.contains(var);
+      return safe_tmp;
+    } else if constexpr (is_same_v<T, let_t>) {
+      auto fv_phi = arg.phi->fvs();
+      bool safe_tmp = arg.phi->is_safe_formula() && arg.psi->is_safe_formula();
+      for (size_t var = 0; var < fv_phi.size(); ++var)
         safe_tmp = safe_tmp && fv_phi.contains(var);
       return safe_tmp;
     } else {

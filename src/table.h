@@ -132,10 +132,9 @@ public:
 
   table() = default;
 
-  explicit table(size_t n_cols) { ncols_ = n_cols; }
+  explicit table(size_t n_cols) : ncols_(n_cols) {}
 
-  explicit table(size_t n_cols, vector<vector<T>> data) {
-    ncols_ = n_cols;
+  explicit table(size_t n_cols, vector<vector<T>> data) : ncols_(n_cols) {
 #ifndef NDEBUG
     bool table_match =
       std::all_of(data.cbegin(), data.cend(),

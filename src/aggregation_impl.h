@@ -19,10 +19,10 @@ public:
     auto as_combiner = static_cast<Combiner *>(this);
     auto it = groups_.template find(group);
     if (it == groups_.end()) {
-      //fmt::print("adding new element {}\n", val);
+      // fmt::print("adding new element {}\n", val);
       groups_.template emplace(group, as_combiner->init_group(val));
     } else {
-      //fmt::print("combining results {} and {}\n", it->second, val);
+      // fmt::print("combining results {} and {}\n", it->second, val);
       as_combiner->combine(it->second, val);
     }
   }
@@ -85,7 +85,6 @@ public:
   sum_combiner() {}
 
   void combine(common::event_data &a, common::event_data &b) const {
-    //fmt::print("adding {} and {}\n", a, b);
     a = a + b;
   }
 };

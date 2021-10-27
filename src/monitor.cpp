@@ -46,9 +46,9 @@ MState::MState(val_type &&state) : state(std::move(state)) {}
 event_table_vec MState::eval(const database &db, const ts_list &ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (any_type_equal_v<T, MPred, MNeg, MExists, MRel, MAndRel, MAnd,
-                                   MOr, MNext, MPrev, MSince, MOnce, MUntil,
-                                   MEventually, MAgg>) {
+    if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MExists, MRel, MAndRel,
+                                   MAnd, MOr, MNext, MPrev, MSince, MOnce,
+                                   MUntil, MEventually, MAgg>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -208,6 +208,18 @@ MState::init_pair MState::init_agg_state(const fo::Formula::agg_t &arg) {
   return {MAgg{uniq(std::move(rec_state)), std::move(impl)}, std::move(layout)};
 }
 
+MState::init_pair MState::init_let_state(const fo::Formula::let_t &arg) {
+  auto [phi_state, phi_layout] = init_mstate(*arg.phi);
+  auto [psi_state, psi_layout] = init_mstate(*arg.psi);
+  auto proj_mask =
+    find_permutation(id_permutation(phi_layout.size()), phi_layout);
+  return {MLet{std::move(proj_mask),
+               {std::move(arg.pred_name), phi_layout.size()},
+               uniq(std::move(phi_state)),
+               uniq(std::move(psi_state))},
+          std::move(psi_layout)};
+}
+
 MState::init_pair MState::init_mstate(const Formula &formula) {
   auto visitor1 = [](auto &&arg) -> MState::init_pair {
     using T = std::decay_t<decltype(arg)>;
@@ -247,6 +259,8 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       return init_since_until(arg);
     } else if constexpr (is_same_v<T, fo::Formula::agg_t>) {
       return init_agg_state(arg);
+    } else if constexpr (is_same_v<T, fo::Formula::let_t>) {
+      return init_let_state(arg);
     } else {
       throw std::runtime_error("not safe");
     }
@@ -279,7 +293,7 @@ event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
   res_tabs.reserve(ts.size());
   const auto it = db.find(std::pair(pred_name, nfvs));
   if (it == db.end()) {
-    return {event_table()};
+    return {event_table(nfvs)};
   }
   for (const auto &ev_for_ts : it->second) {
     event_table tab(nfvs);
@@ -506,6 +520,27 @@ event_table_vec MState::MAgg::eval(const database &db, const ts_list &ts) {
   std::transform(rec_tabs.begin(), rec_tabs.end(), std::back_inserter(res_tabs),
                  [this](auto &tab) { return impl.eval(tab); });
   return res_tabs;
+}
+
+event_table_vec MState::MLet::eval(const database &db, const ts_list &ts) {
+  auto l_tabs = phi_state->eval(db, ts);
+  if (l_tabs.empty())
+    return psi_state->eval(db, ts);
+
+  // TODO: maybe it is better not to do a hard fork and rollback changes instead
+  auto db_cp = db;
+  auto &db_ent = db_cp[db_idx];
+  db_ent.clear();
+  const size_t n_l_tabs = l_tabs.size();
+  db_ent.reserve(n_l_tabs);
+  for (const auto &l_tab : l_tabs) {
+    parse::database_elem new_tab;
+    new_tab.reserve(l_tab.tab_size());
+    for (const auto &e : l_tab)
+      new_tab.push_back(filter_row(projection_mask, e));
+    db_ent.push_back(std::move(new_tab));
+  }
+  return psi_state->eval(db_cp, ts);
 }
 
 }// namespace monitor::detail

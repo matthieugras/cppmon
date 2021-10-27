@@ -186,6 +186,7 @@ public:
   static Formula Until(Interval inter, Formula phil, Formula phir);
   static Formula Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
                      event_data default_value, Term agg_term, Formula phi);
+  static Formula Let(std::string pred_name, Formula phi, Formula psi);
   [[nodiscard]] Formula *inner_if_neg() const;
   [[nodiscard]] fv_set fvs() const;
   [[nodiscard]] size_t degree() const;
@@ -260,9 +261,14 @@ private:
     ptr_type<Formula> phi;
   };
 
+  struct let_t {
+    std::string pred_name;
+    ptr_type<Formula> phi, psi;
+  };
+
   using val_type =
     variant<pred_t, less_t, less_eq_t, eq_t, or_t, and_t, exists_t, prev_t,
-            next_t, since_t, until_t, neg_t, agg_t>;
+            next_t, since_t, until_t, neg_t, agg_t, let_t>;
   static Formula from_json(const json &json_formula);
   explicit Formula(val_type &&val) noexcept;
   explicit Formula(const val_type &val);

@@ -205,9 +205,17 @@ namespace detail {
       event_table_vec eval(const database &db, const ts_list &ts);
     };
 
+    struct MLet {
+      std::vector<size_t> projection_mask;
+      std::pair<std::string, size_t> db_idx;
+      ptr_type<MState> phi_state, psi_state;
+
+      event_table_vec eval(const database &db, const ts_list &ts);
+    };
+
     using val_type =
       variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg, MAndRel,
-              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually, MAgg>;
+              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually, MAgg, MLet>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -234,6 +242,9 @@ namespace detail {
     static init_pair init_prev_state(const fo::Formula::prev_t &arg);
 
     static init_pair init_agg_state(const fo::Formula::agg_t &arg);
+
+    static init_pair init_let_state(const fo::Formula::let_t &arg);
+
 
     template<typename T>
     static std::enable_if_t<
