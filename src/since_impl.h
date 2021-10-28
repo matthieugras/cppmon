@@ -40,9 +40,9 @@ protected:
 
   template<typename Pred>
   void tuple_in_erase_if(Pred pred) {
-    auto combined_pred = [&pred, this](const event &e) {
+    auto combined_pred = [&pred, this](const tuple_buf::value_type &e) {
       if (pred(e)) {
-        temporal_agg_.remove_result(e);
+        temporal_agg_.remove_result(e.first);
         return true;
       }
       return false;
@@ -211,7 +211,6 @@ protected:
     };
     absl::erase_if(this->tuple_since, erase_cond);
     this->tuple_in_erase_if(erase_cond);
-    // absl::erase_if(tuple_in, erase_cond);
   }
 
   bool left_negated;
@@ -252,7 +251,7 @@ public:
 };
 
 class once_agg_impl
-    : public once_base<shared_base<shared_agg_base<once_impl>>> {
+    : public once_base<shared_base<shared_agg_base<once_agg_impl>>> {
 public:
   once_agg_impl(size_t nfvs, fo::Interval inter,
                 agg_temporal::temporal_aggregation_impl temporal_agg);

@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <table.h>
+#include <temporal_aggregation_impl.h>
 #include <traceparser.h>
 #include <tuple>
 #include <type_traits>
@@ -164,21 +165,48 @@ namespace detail {
       event_table_vec eval(const database &db, const ts_list &ts);
     };
 
+    template<typename Impl>
     struct MSince {
       binary_buffer buf;
       devector<size_t> ts_buf;
       ptr_type<MState> l_state, r_state;
-      since_impl impl;
+      Impl impl;
 
-      event_table_vec eval(const database &db, const ts_list &ts);
+      event_table_vec eval(const database &db, const ts_list &ts) {
+        ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
+        auto reduction_fn = [this](event_table &tab_l,
+                                   event_table &tab_r) -> event_table {
+          assert(!ts_buf.empty());
+          size_t new_ts = ts_buf.front();
+          ts_buf.pop_front();
+          auto ret = impl.eval(tab_l, tab_r, new_ts);
+          return ret;
+        };
+        auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state,
+                                                 *r_state, buf, db, ts);
+        return ret;
+      }
     };
 
+    template<typename Impl>
     struct MOnce {
       devector<size_t> ts_buf;
       ptr_type<MState> r_state;
-      once_impl impl;
+      Impl impl;
 
-      event_table_vec eval(const database &db, const ts_list &ts);
+      event_table_vec eval(const database &db, const ts_list &ts) {
+        ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
+        auto rec_tabs = r_state->eval(db, ts);
+        event_table_vec res;
+        res.reserve(rec_tabs.size());
+        for (auto &tab : rec_tabs) {
+          assert(!ts_buf.empty());
+          size_t new_ts = ts_buf.front();
+          ts_buf.pop_front();
+          res.push_back(impl.eval(tab, new_ts));
+        }
+        return res;
+      }
     };
 
     struct MUntil {
@@ -213,9 +241,10 @@ namespace detail {
       event_table_vec eval(const database &db, const ts_list &ts);
     };
 
-    using val_type =
-      variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg, MAndRel,
-              MAndAssign, MAnd, MSince, MOnce, MUntil, MEventually, MAgg, MLet>;
+    using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
+                             MAndRel, MAndAssign, MAnd, MSince<since_agg_impl>,
+                             MSince<since_impl>, MOnce<once_agg_impl>,
+                             MOnce<once_impl>, MUntil, MEventually, MAgg, MLet>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
@@ -246,23 +275,37 @@ namespace detail {
     static init_pair init_let_state(const fo::Formula::let_t &arg);
 
 
-    template<typename T>
+    struct no_agg {};
+
+    template<typename T, typename Agg = no_agg>
     static std::enable_if_t<
       any_type_equal_v<T, fo::Formula::until_t, fo::Formula::since_t>,
       init_pair>
-    init_since_until(const T &arg) {
+    init_since_until(const T &arg, Agg &&agg_impl) {
       using std::conditional_t;
       constexpr bool cond = std::is_same_v<T, fo::Formula::since_t>;
-      using St = conditional_t<cond, MSince, MUntil>;
-      using StTrue = conditional_t<cond, MOnce, MEventually>;
-      using Impl = conditional_t<cond, since_impl, until_impl>;
-      using ImplTrue = conditional_t<cond, once_impl, eventually_impl>;
+      constexpr bool is_in_agg = std::negation_v<std::is_same<Agg, no_agg>>;
+      using Impl = conditional_t<
+        cond, conditional_t<is_in_agg, since_agg_impl, since_impl>, until_impl>;
+      using ImplTrue =
+        conditional_t<cond, conditional_t<is_in_agg, once_agg_impl, once_impl>,
+                      eventually_impl>;
+      using St = conditional_t<cond, MSince<Impl>, MUntil>;
+      using StTrue = conditional_t<cond, MOnce<ImplTrue>, MEventually>;
 
       auto [r_state, r_layout] = init_mstate(*arg.phir);
       if (arg.phil->is_always_true()) {
-        auto impl = ImplTrue(r_layout.size(), arg.inter);
-        return {StTrue{{}, uniq(std::move(r_state)), std::move(impl)},
-                r_layout};
+        if constexpr (is_in_agg) {
+          auto agg_layout = agg_impl.get_layout();
+          auto impl =
+            ImplTrue(r_layout.size(), arg.inter, std::forward<Agg>(agg_impl));
+          return {StTrue{{}, uniq(std::move(r_state)), std::move(impl)},
+                  agg_layout};
+        } else {
+          auto impl = ImplTrue(r_layout.size(), arg.inter);
+          return {StTrue{{}, uniq(std::move(r_state)), std::move(impl)},
+                  r_layout};
+        }
       }
       ptr_type<MState> l_state;
       table_layout l_layout;
@@ -277,15 +320,28 @@ namespace detail {
         l_state = uniq(std::move(pos_pair.first));
         l_layout = std::move(pos_pair.second);
       }
-      auto info = get_join_info(l_layout, r_layout);
-      Impl impl(left_negated, r_layout.size(), std::move(info.comm_idx2),
-                arg.inter);
-      return {St{binary_buffer(),
-                 {},
-                 std::move(l_state),
-                 uniq(std::move(r_state)),
-                 std::move(impl)},
-              std::move(r_layout)};
+      if constexpr (is_in_agg) {
+        auto info = get_join_info(l_layout, r_layout);
+        auto agg_layout = agg_impl.get_layout();
+        Impl impl(left_negated, r_layout.size(), std::move(info.comm_idx2),
+                  arg.inter, std::forward<Agg>(agg_impl));
+        return {St{binary_buffer(),
+                   {},
+                   std::move(l_state),
+                   uniq(std::move(r_state)),
+                   std::move(impl)},
+                std::move(agg_layout)};
+      } else {
+        auto info = get_join_info(l_layout, r_layout);
+        Impl impl(left_negated, r_layout.size(), std::move(info.comm_idx2),
+                  arg.inter);
+        return {St{binary_buffer(),
+                   {},
+                   std::move(l_state),
+                   uniq(std::move(r_state)),
+                   std::move(impl)},
+                std::move(r_layout)};
+      }
     }
 
     static init_pair init_mstate(const Formula &formula);

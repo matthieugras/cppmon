@@ -47,8 +47,10 @@ event_table_vec MState::eval(const database &db, const ts_list &ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MExists, MRel, MAndRel,
-                                   MAnd, MOr, MNext, MPrev, MSince, MOnce,
-                                   MUntil, MEventually, MAgg>) {
+                                   MAnd, MOr, MNext, MPrev, MSince<since_impl>,
+                                   MSince<since_agg_impl>, MOnce<once_impl>,
+                                   MOnce<once_agg_impl>, MUntil, MEventually,
+                                   MAgg>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -201,12 +203,22 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
 }
 
 MState::init_pair MState::init_agg_state(const fo::Formula::agg_t &arg) {
-  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
-  auto impl =
-    agg_base::aggregation_impl(rec_layout, arg.agg_term, arg.default_value,
-                                   arg.ty, arg.res_var, arg.num_bound_vars);
-  auto layout = impl.get_layout();
-  return {MAgg{uniq(std::move(rec_state)), std::move(impl)}, std::move(layout)};
+  // TODO: clean this up - split init into two functions
+  if (auto *since_ptr = var2::get_if<fo::Formula::since_t>(&arg.phi->val)) {
+    auto rec_layout = init_since_until(*since_ptr, no_agg{});
+    auto impl = agg_temporal::temporal_aggregation_impl(
+      rec_layout.second, arg.agg_term, arg.default_value, arg.ty, arg.res_var,
+      arg.num_bound_vars);
+    return init_since_until(*since_ptr, std::move(impl));
+  } else {
+    auto [rec_state, rec_layout] = init_mstate(*arg.phi);
+    auto impl =
+      agg_base::aggregation_impl(rec_layout, arg.agg_term, arg.default_value,
+                                 arg.ty, arg.res_var, arg.num_bound_vars);
+    auto layout = impl.get_layout();
+    return {MAgg{uniq(std::move(rec_state)), std::move(impl)},
+            std::move(layout)};
+  }
 }
 
 MState::init_pair MState::init_let_state(const fo::Formula::let_t &arg) {
@@ -257,7 +269,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       return init_next_state(arg);
     } else if constexpr (any_type_equal_v<T, fo::Formula::since_t,
                                           fo::Formula::until_t>) {
-      return init_since_until(arg);
+      return init_since_until(arg, no_agg{});
     } else if constexpr (is_same_v<T, fo::Formula::agg_t>) {
       return init_agg_state(arg);
     } else if constexpr (is_same_v<T, fo::Formula::let_t>) {
@@ -441,41 +453,6 @@ event_table_vec MState::MNext::eval(const database &db, const ts_list &ts) {
   }
   assert(!past_ts.empty() && tabs_it == rec_tabs.end());
   return res_tabs;
-}
-
-event_table_vec MState::MSince::eval(const database &db, const ts_list &ts) {
-  ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
-  auto reduction_fn = [this](event_table &tab_l,
-                             event_table &tab_r) -> event_table {
-    assert(!ts_buf.empty());
-    size_t new_ts = ts_buf.front();
-    ts_buf.pop_front();
-    /*fmt::print(
-      "calling since_impl eval with new ts: {}, tab_l: {}, tab_r: {}\n", new_ts,
-      tab_l, tab_r);*/
-    auto ret = impl.eval(tab_l, tab_r, new_ts);
-    // fmt::print("since_impl returned: {}\n", ret);
-    // fmt::print("since_impl state is:\n");
-    // impl.print_state();
-    return ret;
-  };
-  auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
-                                           buf, db, ts);
-  return ret;
-}
-
-event_table_vec MState::MOnce::eval(const database &db, const ts_list &ts) {
-  ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
-  auto rec_tabs = r_state->eval(db, ts);
-  event_table_vec res;
-  res.reserve(rec_tabs.size());
-  for (auto &tab : rec_tabs) {
-    assert(!ts_buf.empty());
-    size_t new_ts = ts_buf.front();
-    ts_buf.pop_front();
-    res.push_back(impl.eval(tab, new_ts));
-  }
-  return res;
 }
 
 event_table_vec MState::MUntil::eval(const database &db, const ts_list &ts) {
