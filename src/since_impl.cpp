@@ -2,131 +2,25 @@
 #include <fmt/core.h>
 
 namespace monitor::detail {
-since_impl_base::since_impl_base(size_t nfvs, fo::Interval inter)
-    : nfvs(nfvs), inter(inter) {}
-
-void since_impl_base::drop_too_old(size_t ts) {
-  for (; !data_in.empty(); data_in.pop_front()) {
-    auto old_ts = data_in.front().first;
-    assert(ts >= old_ts);
-    if (inter.leq_upper(ts - old_ts))
-      break;
-    auto &tab = data_in.front();
-    for (const auto &e : tab.second) {
-      auto in_it = tuple_in.find(e);
-      if (in_it != tuple_in.end() && in_it->second == tab.first)
-        tuple_in.erase(in_it);
-      auto since_it = tuple_since.find(e);
-      assert(since_it == tuple_since.end() || since_it->second.second > 0);
-      if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
-        tuple_since.erase(since_it);
-    }
-  }
-  for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
-       data_prev.pop_front()) {
-    for (const auto &e : data_prev.front().second) {
-      auto since_it = tuple_since.find(e);
-      assert(since_it == tuple_since.end() || since_it->second.second > 0);
-      if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
-        tuple_since.erase(since_it);
-    }
-  }
-}
-
-void since_impl_base::add_new_ts(size_t ts) {
-  drop_too_old(ts);
-  for (; !data_prev.empty(); data_prev.pop_front()) {
-    auto &latest = data_prev.front();
-    size_t old_ts = latest.first;
-    assert(old_ts <= ts);
-    if (inter.lt_lower(ts - old_ts))
-      break;
-    for (const auto &e : latest.second) {
-      auto since_it = tuple_since.find(e);
-      if (since_it != tuple_since.end() && since_it->second.first <= old_ts)
-        tuple_in.insert_or_assign(e, old_ts);
-    }
-    assert(data_in.empty() || old_ts >= data_in.back().first);
-    data_in.push_back(std::move(latest));
-  }
-}
-
-void since_impl_base::add_new_table(event_table &&tab_r, size_t ts) {
-  for (const auto &e : tab_r) {
-    auto since_it = tuple_since.find(e);
-    if (since_it == tuple_since.end())
-      tuple_since.emplace(e, std::pair(ts, 1));
-    else
-      since_it->second.second++;
-  }
-  if (inter.contains(0)) {
-    for (const auto &e : tab_r)
-      tuple_in.insert_or_assign(e, ts);
-    assert(data_in.empty() || ts >= data_in.back().first);
-    data_in.emplace_back(ts, std::move(tab_r));
-  } else {
-    assert(data_prev.empty() || ts >= data_prev.back().first);
-    data_prev.emplace_back(ts, std::move(tab_r));
-  }
-}
-
-event_table since_impl_base::produce_result() {
-  event_table tab(nfvs);
-  tab.reserve(tuple_in.size());
-  for (auto it = tuple_in.cbegin(); it != tuple_in.cend();) {
-    auto nxt_it = it;
-    nxt_it++;
-    if (nxt_it != tuple_in.cend()) {
-      __builtin_prefetch(nxt_it->first.data());
-      __builtin_prefetch(nxt_it->first.data() + 4);
-      auto nxt_nxt_it = nxt_it;
-      nxt_nxt_it++;
-      if (nxt_nxt_it != tuple_in.cend())
-        __builtin_prefetch(nxt_nxt_it->first.data());
-    }
-    tab.add_row(it->first);
-    it = nxt_it;
-  }
-  return tab;
-}
-
 since_impl::since_impl(bool left_negated, size_t nfvs,
                        std::vector<size_t> comm_idx_r, fo::Interval inter)
-    : since_impl_base(nfvs, inter), left_negated(left_negated),
-      comm_idx_r(std::move(comm_idx_r)) {}
+    : since_base<shared_base<shared_no_agg<since_impl>>>(
+        left_negated, std::move(comm_idx_r), nfvs, inter) {}
 
-void since_impl::join(event_table &tab_l) {
-  auto hash_set = event_table::hash_all_destructive(tab_l);
-  auto erase_cond = [this, &hash_set](const auto &tup) {
-    if (left_negated)
-      return hash_set.contains(filter_row(comm_idx_r, tup.first));
-    else
-      return !hash_set.contains(filter_row(comm_idx_r, tup.first));
-  };
-  absl::erase_if(tuple_since, erase_cond);
-  absl::erase_if(tuple_in, erase_cond);
-}
+once_agg_impl::once_agg_impl(
+  size_t nfvs, fo::Interval inter,
+  agg_temporal::temporal_aggregation_impl temporal_agg)
+    : once_base<shared_base<shared_agg_base<once_impl>>>(
+        nfvs, inter, std::move(temporal_agg)){};
 
-event_table since_impl::eval(event_table &tab_l, event_table &tab_r,
-                             size_t new_ts) {
-  add_new_ts(new_ts);
-  join(tab_l);
-  add_new_table(std::move(tab_r), new_ts);
-  return produce_result();
-}
-
-void since_impl::print_state() {
-  fmt::print("MSINCE STATE\ncomm_idx_r: {}\ndata_prev: {}\ndata_in: "
-             "{}\ntuple_since: {}\ntuple_in: {}\nEND STATE\n",
-             comm_idx_r, data_prev, data_in, tuple_since, tuple_in);
-}
+since_agg_impl::since_agg_impl(
+  bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
+  fo::Interval inter, agg_temporal::temporal_aggregation_impl temporal_agg)
+    : since_base<shared_base<shared_agg_base<since_agg_impl>>>(
+        left_negated, std::move(comm_idx_r), nfvs, inter,
+        std::move(temporal_agg)) {}
 
 once_impl::once_impl(size_t nfvs, fo::Interval inter)
-    : since_impl_base(nfvs, inter) {}
-
-event_table once_impl::eval(event_table &tab_r, size_t new_ts) {
-  add_new_ts(new_ts);
-  add_new_table(std::move(tab_r), new_ts);
-  return produce_result();
-}
+    : once_base<shared_base<shared_no_agg<once_impl>>>(
+        nfvs, inter) {}
 }// namespace monitor::detail
