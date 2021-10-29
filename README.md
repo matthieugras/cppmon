@@ -1,6 +1,6 @@
 ## CPPMon
 
-A monitor for metric first-order temporal properties written in C++.
+A monitor for metric first-order temporal properties, written in C++.
 
 ### Build instructions
 
@@ -57,7 +57,7 @@ databases.
 #### Output format
 
 CPPMon uses the same output format as Monpoly. Additionally, we aim to produce *identically formatted* output. In
-particular, the satisfactions at every timepoint are lexicographically sorted.
+particular, the reported satisfactions for each time point are lexicographically sorted.
 
 #### Running the monitor
 
@@ -85,7 +85,8 @@ See the `docs` folder.
 ### References
 
 CPPMon is based on the following works:
+
 - [Schneider, Joshua, et al. *"A formally verified monitor for metric first-order temporal
-logic"*](https://link.springer.com/chapter/10.1007/978-3-030-32079-9_18)
+  logic"*](https://link.springer.com/chapter/10.1007/978-3-030-32079-9_18)
 - [Basin, David, et al. *"A formally verified, optimized monitor for metric first-order dynamic
-logic"*](https://link.springer.com/chapter/10.1007/978-3-030-51074-9_25)
+  logic"*](https://link.springer.com/chapter/10.1007/978-3-030-51074-9_25)
