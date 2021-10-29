@@ -84,8 +84,8 @@ See the `docs` folder.
 
 ### References
 
-CPPMon is based on the following works:  
-[Schneider, Joshua, et al. *"A formally verified monitor for metric first-order temporal
+CPPMon is based on the following works:
+- [Schneider, Joshua, et al. *"A formally verified monitor for metric first-order temporal
 logic*](https://link.springer.com/chapter/10.1007/978-3-030-32079-9_18)
-[Basin, David, et al. *"A formally verified, optimized monitor for metric first-order dynamic
+- [Basin, David, et al. *"A formally verified, optimized monitor for metric first-order dynamic
 logic*](https://link.springer.com/chapter/10.1007/978-3-030-51074-9_25)
