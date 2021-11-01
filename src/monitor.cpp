@@ -502,8 +502,6 @@ event_table_vec MState::MAgg::eval(const database &db, const ts_list &ts) {
 
 event_table_vec MState::MLet::eval(const database &db, const ts_list &ts) {
   auto l_tabs = phi_state->eval(db, ts);
-  if (l_tabs.empty())
-    return psi_state->eval(db, ts);
 
   // TODO: maybe it is better not to do a hard fork and rollback changes instead
   auto db_cp = db;

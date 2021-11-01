@@ -82,7 +82,7 @@ private:
 
   struct sig_type_list {
     using res_type = std::vector<arg_types>;
-    RULE dsl::parenthesized.list(dsl::p<sig_type>, dsl::sep(dsl::comma));
+    RULE dsl::parenthesized.opt_list(dsl::p<sig_type>, dsl::sep(dsl::comma));
     VALUE lexy::as_list<res_type>;
   };
 
@@ -150,7 +150,7 @@ private:
 
   struct arg_tuple {
     using res_type = std::vector<arg_value::res_type>;
-    RULE dsl::parenthesized.list(dsl::p<arg_value>, dsl::sep(dsl::comma));
+    RULE dsl::parenthesized.opt_list(dsl::p<arg_value>, dsl::sep(dsl::comma));
     VALUE lexy::as_list<res_type>;
   };
 
