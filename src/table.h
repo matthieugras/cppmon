@@ -146,6 +146,18 @@ public:
                           std::make_move_iterator(data.end()));
   }
 
+  /*explicit table(size_t n_cols, vector<vector<T>> &&data) : ncols_(n_cols) {
+#ifndef NDEBUG
+    bool table_match =
+      std::all_of(data.cbegin(), data.cend(),
+                  [n_cols](const auto &row) { return row.size() == n_cols; });
+    if (!table_match)
+      fmt::print(FMT_STRING("data row with wrong length"), data);
+#endif
+    data_.template insert(std::make_move_iterator(data.begin()),
+                          std::make_move_iterator(data.end()));
+  }*/
+
   [[nodiscard]] static table<T> empty_table() { return table(0, {}); };
 
   [[nodiscard]] static table<T> unit_table() { return table(0, {{}}); }

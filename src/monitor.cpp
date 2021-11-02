@@ -148,9 +148,20 @@ MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
 }
 
 MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
+
+  size_t n_args = arg.pred_args.size();
+  MPred::pred_ty pred_ty;
+  if (arg.pred_name == "tp" && n_args == 1)
+    pred_ty = MPred::TP_PRED;
+  else if (arg.pred_name == "ts" && n_args == 1)
+    pred_ty = MPred::TS_PRED;
+  else if (arg.pred_name == "tpts" && n_args == 2)
+    pred_ty = MPred::TPTS_PRED;
+  else
+    pred_ty = MPred::OTHER_PRED;
   absl::flat_hash_map<size_t, vector<size_t>> var_2_pred_pos;
   vector<pair<size_t, event_data>> pos_2_cst;
-  for (size_t i = 0; i < arg.pred_args.size(); ++i) {
+  for (size_t i = 0; i < n_args; ++i) {
     assert(arg.pred_args[i].is_var() || arg.pred_args[i].is_const());
     if (const auto *var = arg.pred_args[i].get_if_var())
       var_2_pred_pos[*var].push_back(i);
@@ -163,8 +174,8 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
     lay.push_back(var);
     var_pos.push_back(pos_idxs);
   }
-  return {MPred{lay.size(), arg.pred_name, arg.pred_args, std::move(var_pos),
-                std::move(pos_2_cst)},
+  return {MPred{pred_ty, 0, lay.size(), arg.pred_name, arg.pred_args,
+                std::move(var_pos), std::move(pos_2_cst)},
           lay};
 }
 
@@ -281,42 +292,59 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
   return var2::visit(visitor1, formula.val);
 }
 
-optional<vector<event_data>>
-MState::MPred::match(const vector<event_data> &event_args) const {
+
+void MState::MPred::match(const vector<event_data> &event_args,
+                          event_table &acc_tab) const {
   vector<event_data> res;
   res.reserve(nfvs);
   assert(event_args.size() == pred_args.size());
   for (const auto &[pos, cst] : pos_2_cst)
     if (event_args[pos] != cst)
-      return {};
+      return;
   for (const auto &poss : var_pos) {
     size_t num_pos = poss.size();
     assert(num_pos > 0);
     event_data expected = event_args[poss[0]];
     for (size_t i = 1; i < num_pos; ++i)
       if (event_args[poss[i]] != expected)
-        return {};
+        return;
     res.push_back(std::move(expected));
   }
-  return std::move(res);
+  acc_tab.add_row(std::move(res));
 }
 
 event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
+  size_t num_tps = ts.size();
   event_table_vec res_tabs;
-  res_tabs.reserve(ts.size());
-  const auto it = db.find(std::pair(pred_name, nfvs));
-  if (it == db.end()) {
-    return {event_table(nfvs)};
-  }
-  for (const auto &ev_for_ts : it->second) {
+  res_tabs.reserve(num_tps);
+  if (ty == TP_PRED) {
     event_table tab(nfvs);
-    for (const auto &ev : ev_for_ts) {
-      auto new_row = match(ev);
-      if (new_row) {
-        tab.add_row(std::move(*new_row));
-      }
-    }
+    for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
+      match(make_vector(common::event_data::Int(curr_tp)), tab);
     res_tabs.push_back(std::move(tab));
+  } else if (ty == TS_PRED) {
+    event_table tab(nfvs);
+    for (size_t curr_ts : ts)
+      match(make_vector(common::event_data::Int(curr_ts)), tab);
+    res_tabs.push_back(std::move(tab));
+  } else if (ty == TPTS_PRED) {
+    event_table tab(nfvs);
+    for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
+      match(make_vector(common::event_data::Int(curr_tp),
+                        common::event_data::Int(ts[i])),
+            tab);
+    res_tabs.push_back(std::move(tab));
+  } else {
+    const auto it = db.find(std::pair(pred_name, nfvs));
+    if (it == db.end()) {
+      return {event_table(nfvs)};
+    }
+    for (const auto &ev_for_ts : it->second) {
+      event_table tab(nfvs);
+      for (const auto &ev : ev_for_ts)
+        match(ev, tab);
+      res_tabs.push_back(std::move(tab));
+    }
   }
   return res_tabs;
 }

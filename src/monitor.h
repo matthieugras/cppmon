@@ -94,6 +94,14 @@ namespace detail {
     };
 
     struct MPred {
+      enum pred_ty
+      {
+        TP_PRED,
+        TS_PRED,
+        TPTS_PRED,
+        OTHER_PRED
+      } ty;
+      size_t curr_tp;
       size_t nfvs;
       name pred_name;
       vector<Term> pred_args;
@@ -101,7 +109,7 @@ namespace detail {
       vector<pair<size_t, event_data>> pos_2_cst;
       event_table_vec eval(const database &db, const ts_list &ts);
 
-      [[nodiscard]] optional<event> match(const event &event_args) const;
+      void match(const event &event_args, event_table &acc_tab) const;
     };
 
     struct MAnd {
