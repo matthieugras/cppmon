@@ -58,7 +58,6 @@ void monitor_driver::do_monitor() {
                               make_vector(ts));
     print_satisfactions(sats);
   }
-  auto sats_last =
-    monitor_.step({}, make_vector(std::numeric_limits<size_t>::max()));
+  auto sats_last = monitor_.last_step();
   print_satisfactions(sats_last);
 }

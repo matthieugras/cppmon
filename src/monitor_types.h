@@ -20,6 +20,7 @@ using satisfactions = std::vector<
 using event = std::vector<common::event_data>;
 using binary_buffer = common::binary_buffer<event_table>;
 using ts_list = std::vector<size_t>;
+inline constexpr size_t MAXIMUM_TIMESTAMP = std::numeric_limits<size_t>::max();
 }// namespace monitor
 
 #endif

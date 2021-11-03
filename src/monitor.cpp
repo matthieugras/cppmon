@@ -32,12 +32,17 @@ satisfactions monitor::step(const database &db, const ts_list &ts) {
   for (size_t i = 0; i < n; ++i, ++new_curr_tp) {
     auto output_tab = sats[i].make_verdicts(output_var_permutation_);
     auto it = tp_ts_map_.find(new_curr_tp);
-    transformed_sats.emplace_back(it->second, new_curr_tp,
-                                  std::move(output_tab));
+    if (it->second < MAXIMUM_TIMESTAMP)
+      transformed_sats.emplace_back(it->second, new_curr_tp,
+                                    std::move(output_tab));
     tp_ts_map_.erase(it);
   }
   curr_tp_ = new_curr_tp;
   return transformed_sats;
+}
+
+satisfactions monitor::last_step() {
+  return step({}, make_vector(static_cast<size_t>(MAXIMUM_TIMESTAMP)));
 }
 
 // MState methods
@@ -174,9 +179,22 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
     lay.push_back(var);
     var_pos.push_back(pos_idxs);
   }
-  return {MPred{pred_ty, 0, lay.size(), arg.pred_name, arg.pred_args,
-                std::move(var_pos), std::move(pos_2_cst)},
-          lay};
+  auto mpred_state = MPred{pred_ty,
+                           0,
+                           arg.pred_args.size(),
+                           lay.size(),
+                           arg.pred_name,
+                           arg.pred_args,
+                           std::move(var_pos),
+                           std::move(pos_2_cst)};
+  //mpred_state.print_state();
+  return {std::move(mpred_state), lay};
+}
+
+void MState::MPred::print_state() {
+  fmt::print("MPRED STATE \nnfvs: {}, pred_name: {}, var_pos: "
+             "{}, pos_2_cst: {}\n",
+             nfvs, pred_name, var_pos, pos_2_cst);
 }
 
 MState::init_pair MState::init_exists_state(const fo::Formula::exists_t &arg) {
@@ -335,7 +353,7 @@ event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
             tab);
     res_tabs.push_back(std::move(tab));
   } else {
-    const auto it = db.find(std::pair(pred_name, nfvs));
+    const auto it = db.find(std::pair(pred_name, arity));
     if (it == db.end()) {
       return {event_table(nfvs)};
     }

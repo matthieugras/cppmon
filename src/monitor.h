@@ -101,15 +101,14 @@ namespace detail {
         TPTS_PRED,
         OTHER_PRED
       } ty;
-      size_t curr_tp;
-      size_t nfvs;
+      size_t curr_tp, arity, nfvs;
       name pred_name;
       vector<Term> pred_args;
       vector<vector<size_t>> var_pos;
       vector<pair<size_t, event_data>> pos_2_cst;
       event_table_vec eval(const database &db, const ts_list &ts);
-
       void match(const event &event_args, event_table &acc_tab) const;
+      void print_state();
     };
 
     struct MAnd {
@@ -187,7 +186,10 @@ namespace detail {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
+          //fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l, tab_r, new_ts);
           auto ret = impl.eval(tab_l, tab_r, new_ts);
+          //fmt::print("state after call:\n");
+          //impl.print_state();
           return ret;
         };
         auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state,
@@ -361,6 +363,7 @@ namespace detail {
     monitor() = default;
     explicit monitor(const Formula &formula);
     satisfactions step(const database &db, const ts_list &ts);
+    satisfactions last_step();
 
   private:
     MState state_;

@@ -235,11 +235,20 @@ class since_impl : public since_base<shared_base<shared_no_agg<since_impl>>> {
 public:
   since_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
              fo::Interval inter);
+
+  void print_state() {
+    fmt::print("since_impl state: left_negated: {}, comm_idx_r: {}, data_prev: "
+               "{}, data_in {}, tuple_in: {}, tuple_since: {}\n",
+               left_negated, comm_idx_r, data_prev, data_in, tuple_in,
+               tuple_since);
+  }
 };
 
 class once_impl : public once_base<shared_base<shared_no_agg<once_impl>>> {
 public:
   once_impl(size_t nfvs, fo::Interval inter);
+
+  void print_state() {}
 };
 
 class since_agg_impl
@@ -248,6 +257,8 @@ public:
   since_agg_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
                  fo::Interval inter,
                  agg_temporal::temporal_aggregation_impl temporal_agg);
+
+  void print_state() {}
 };
 
 class once_agg_impl
@@ -255,6 +266,8 @@ class once_agg_impl
 public:
   once_agg_impl(size_t nfvs, fo::Interval inter,
                 agg_temporal::temporal_aggregation_impl temporal_agg);
+
+  void print_state() {}
 };
 
 
