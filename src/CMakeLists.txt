@@ -1,6 +1,7 @@
 add_subdirectory(common)
 add_subdirectory(parsing)
 add_subdirectory(abtesting)
+add_subdirectory(shm_monitor_interface)
 
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -27,7 +28,8 @@ target_link_libraries(formula
 
 # Monitor
 add_library(monitor STATIC
-    monitor_driver.cpp
+    file_monitor_driver.cpp
+    shm_monitor_driver.cpp
     monitor.cpp
     aggregation_impl.cpp
     temporal_aggregation_impl.cpp

@@ -8,8 +8,9 @@ project(cppmon VERSION 0.1
     LANGUAGES C CXX)
 
 option(USE_JEMALLOC "Use jemalloc" OFF)
+option(ENABLE_SANITIZERS "Enable ASAN and UBSAN" OFF)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -22,7 +23,13 @@ check_ipo_supported(LANGUAGES C CXX)
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup(TARGETS)
 
-set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+if (ENABLE_SANITIZERS)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address,undefined")
+endif ()
+
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libgcc -static-libstdc++")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 FetchContent_Declare(lexy

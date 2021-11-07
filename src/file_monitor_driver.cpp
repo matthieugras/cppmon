@@ -1,9 +1,8 @@
 #include <cassert>
 #include <database.h>
+#include <file_monitor_driver.h>
 #include <fmt/core.h>
-#include <limits>
 #include <monitor.h>
-#include <monitor_driver.h>
 #include <string>
 #include <traceparser.h>
 #include <util.h>
@@ -25,7 +24,7 @@ static void print_satisfactions(monitor::satisfactions &sats) {
   }
 }
 
-monitor_driver::monitor_driver(const std::filesystem::path &formula_path,
+file_monitor_driver::file_monitor_driver(const std::filesystem::path &formula_path,
                                const std::filesystem::path &sig_path,
                                const std::filesystem::path &log_path) {
   namespace fs = std::filesystem;
@@ -49,7 +48,7 @@ monitor_driver::monitor_driver(const std::filesystem::path &formula_path,
   monitor_ = std::move(tmp_mon);
 }
 
-void monitor_driver::do_monitor() {
+void file_monitor_driver::do_monitor() {
   using parse::timestamped_database;
   std::string db_str;
   while (std::getline(log_, db_str)) {
