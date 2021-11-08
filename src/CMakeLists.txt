@@ -30,6 +30,7 @@ target_link_libraries(formula
 add_library(monitor STATIC
     file_monitor_driver.cpp
     shm_monitor_driver.cpp
+    monitor_driver.cpp
     monitor.cpp
     aggregation_impl.cpp
     temporal_aggregation_impl.cpp
@@ -44,7 +45,8 @@ target_link_libraries(monitor
     common
     traceparser
     table
-    formula)
+    formula
+    shm_shared_state)
 
 # Main executable
 add_executable(cppmon cppmon.cpp)

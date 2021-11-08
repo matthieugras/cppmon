@@ -9,9 +9,9 @@ shared_state::shared_state(const void_allocator &alloc)
       done_(false) {}
 
 void shared_state::add_event(string &&name, event_data_list &&data) {
+  scoped_lock lk(mutex_);
   if (buf_.empty())
     throw std::runtime_error("no database to append the event to.");
-  scoped_lock lk(mutex_);
   buf_.back().second.push_back(std::pair(std::move(name), std::move(data)));
 }
 
@@ -43,6 +43,25 @@ void shared_state::start_new_database(size_t ts) {
   if (!was_empty) {
     data_avail_ = true;
     cond_.notify_one();
+  }
+}
+
+std::pair<database_buffer, bool> shared_state::get_events() {
+  database_buffer result(alloc_);
+  scoped_lock lk(mutex_);
+  while (!done_ && !data_avail_)
+    cond_.wait(lk);
+  assert(lk.owns());
+  if (done_) {
+    result.splice(buf_.end(), buf_);
+    return std::pair(std::move(result), true);
+  } else {
+    assert(buf_.size() > 1);
+    auto it_before_end = buf_.end();
+    it_before_end--;
+    result.splice(it_before_end, buf_);
+    assert(!buf_.empty());
+    return std::pair(std::move(result), false);
   }
 }
 

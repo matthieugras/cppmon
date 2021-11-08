@@ -1,13 +1,14 @@
-#ifndef CPPMON_SHM_EVENT_PRODUCER_H
-#define CPPMON_SHM_EVENT_PRODUCER_H
+#ifndef CPPMON_CPPMON_EVENT_SOURCE_H
+#define CPPMON_CPPMON_EVENT_SOURCE_H
 
-#include <c_event_types.h>
+#include <cppmon_event_types_export.h>
 
 #ifdef __cplusplus
 namespace ipc {
 class event_source;
 }
 using ev_src_ctxt = ipc::event_source;
+#define LINK_API __attribute__((visibility("default")))
 #define EXPORT_C extern "C"
 #include <cstddef>
 #else
@@ -33,13 +34,14 @@ typedef struct {
   char *shm_id;
 } ev_src_init_opts;
 
-ev_src_ctxt *ev_src_init(const ev_src_init_opts *options);
-void ev_src_free(ev_src_ctxt *ctx);
-int ev_src_teardown(ev_src_ctxt *ctx);
-int ev_src_add_db(ev_src_ctxt *ctx, size_t timestamp);
-int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name, const c_ev_ty *ev_types,
-                  const c_ev_data *data, size_t arity);
-const char *ev_src_last_err(ev_src_ctxt *ctx);
+LINK_API ev_src_ctxt *ev_src_init(const ev_src_init_opts *options);
+LINK_API void ev_src_free(ev_src_ctxt *ctx);
+LINK_API int ev_src_teardown(ev_src_ctxt *ctx);
+LINK_API int ev_src_add_db(ev_src_ctxt *ctx, size_t timestamp);
+LINK_API int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
+                           const c_ev_ty *ev_types, const c_ev_data *data,
+                           size_t arity);
+LINK_API const char *ev_src_last_err(ev_src_ctxt *ctx);
 
 #ifdef __cplusplus
 }
@@ -87,4 +89,4 @@ private:
 #endif
 
 
-#endif// CPPMON_SHM_EVENT_PRODUCER_H
+#endif// CPPMON_CPPMON_EVENT_SOURCE_H

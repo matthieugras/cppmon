@@ -12,6 +12,7 @@ public:
   file_monitor_driver(const std::filesystem::path &formula_path,
                  const std::filesystem::path &sig_path,
                  const std::filesystem::path &log_path);
+  ~file_monitor_driver() noexcept override;
   void do_monitor() override;
 
 private:

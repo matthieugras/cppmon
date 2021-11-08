@@ -1,7 +1,7 @@
 #ifndef CPPMON_SHM_SHARED_STATE_H
 #define CPPMON_SHM_SHARED_STATE_H
 #include <boost/interprocess/allocators/allocator.hpp>
-#include <boost/interprocess/containers/deque.hpp>
+#include <boost/interprocess/containers/list.hpp>
 #include <boost/interprocess/containers/string.hpp>
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
@@ -9,7 +9,7 @@
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/variant2/variant.hpp>
-#include <c_event_types.h>
+#include <cppmon_event_types_export.h>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -36,7 +36,7 @@ using timestamped_database = std::pair<size_t, database>;
 using timestamped_database_allocator =
   boost_ipc::allocator<timestamped_database, segment_manager_t>;
 using database_buffer =
-  boost_ipc::deque<timestamped_database, timestamped_database_allocator>;
+  boost_ipc::list<timestamped_database, timestamped_database_allocator>;
 using mutex_t = boost_ipc::interprocess_mutex;
 using condition_t = boost_ipc::interprocess_condition;
 using scoped_lock = boost_ipc::scoped_lock<mutex_t>;
@@ -47,6 +47,7 @@ public:
   void add_event(string &&name, event_data_list &&data);
   void add_c_event(std::string_view name, std::span<const c_ev_ty> tys,
                    std::span<const c_ev_data> data);
+  std::pair<database_buffer, bool> get_events();
   void start_new_database(size_t ts);
   void terminate();
 

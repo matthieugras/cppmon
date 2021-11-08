@@ -6,14 +6,10 @@ target_link_libraries(shm_shared_state PUBLIC
     CONAN_PKG::fmt
     CONAN_PKG::boost)
 
-add_library(shm_event_consumer STATIC shm_event_consumer.cpp)
-target_include_directories(shm_event_consumer PUBLIC ${SHM_INCLUDES})
-target_link_libraries(shm_event_consumer PUBLIC shm_shared_state)
-
-add_library(shm_event_producer SHARED shm_event_producer.cpp)
-target_include_directories(shm_event_producer PRIVATE
+add_library(cppmon_event_source SHARED cppmon_event_source.cpp)
+target_include_directories(cppmon_event_source PUBLIC
     ${SHM_INCLUDES})
-target_link_libraries(shm_event_producer PRIVATE
+target_link_libraries(cppmon_event_source PRIVATE
     CONAN_PKG::fmt
     shm_shared_state)
-target_link_options(shm_event_producer PRIVATE "LINKER:--exclude-libs,ALL")
+target_link_options(cppmon_event_source PRIVATE "LINKER:--exclude-libs,ALL")

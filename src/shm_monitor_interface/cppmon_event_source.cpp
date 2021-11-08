@@ -1,6 +1,6 @@
+#include <cppmon_event_source.h>
 #include <cstdio>
 #include <exception>
-#include <shm_event_producer.h>
 #include <stdexcept>
 #include <stdlib.h>
 
@@ -90,7 +90,7 @@ const char *event_source::get_error() const {
 event_source::event_source(bool log_to_file, bool log_to_stdout,
                            std::string shm_id, std::string log_path)
     : events_in_db_(0), segment_(boost_ipc::open_only, shm_id.data()),
-      do_log_(false) {
+      state_(nullptr), do_log_(false) {
   if (log_to_file || log_to_stdout)
     do_log_ = true;
   if (log_to_file)
