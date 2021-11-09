@@ -43,4 +43,5 @@ FetchContent_Declare(lexy
 FetchContent_MakeAvailable(lexy)
 
 add_subdirectory(src)
+add_subdirectory(bench)
 add_subdirectory(tests)

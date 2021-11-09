@@ -1,6 +1,7 @@
-#include <cppmon_event_source.h>
 #include <cstdio>
+#include <cstring>
 #include <exception>
+#include <shm_event_source.h>
 #include <stdexcept>
 #include <stdlib.h>
 
@@ -8,16 +9,18 @@ EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
   try {
     bool log_to_file = options->flags.log_to_file,
          log_to_stdout = options->flags.log_to_stdout;
-    std::string shm_id =
-      options->shm_id ? std::string(options->shm_id) : "cppmon_shm";
+    std::string uds_sock_path = options->uds_sock_path
+                                  ? std::string(options->uds_sock_path)
+                                  : "cppmon_uds";
     if (options->log_path)
-      return new ipc::event_source(log_to_file, log_to_stdout, shm_id,
+      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
                                    std::string(options->log_path));
     else
-      return new ipc::event_source(log_to_file, log_to_stdout, shm_id);
+      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path);
   } catch (const std::exception &e) {
     fmt::print(stderr,
-               "failed to initialize context because of exception: {}\n",
+               "failed to initialize context because of exception: {}\n"
+               "Verify that cppmon is started...\n",
                e.what());
     std::abort();
   } catch (...) {
@@ -56,8 +59,7 @@ EXPORT_C int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
                            size_t arity) {
   try {
     assert(ev_types != nullptr && data != nullptr);
-    ctx->add_event(std::string_view(ev_name), std::span(ev_types, arity),
-                   std::span(data, arity));
+    ctx->add_event(ev_name, ev_types, data, arity);
     return 0;
   } catch (const std::exception &e) {
     ctx->set_error(
@@ -88,75 +90,73 @@ const char *event_source::get_error() const {
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,
-                           std::string shm_id, std::string log_path)
-    : events_in_db_(0), segment_(boost_ipc::open_only, shm_id.data()),
-      state_(nullptr), do_log_(false) {
+                           const std::string &socket_path, std::string log_path)
+    : events_in_db_(0), do_log_(false), at_least_one_db_(false),
+      serial_(socket_path) {
   if (log_to_file || log_to_stdout)
     do_log_ = true;
   if (log_to_file)
     log_file_.emplace(fmt::output_file(log_path));
-  auto [ptr, count] = segment_.find<shared_state>(boost_ipc::unique_instance);
-  if (count != 1)
-    throw std::runtime_error("shared memory segment not found ... cppmon is "
-                             "started and uses same shm_id?");
-  state_ = ptr;
 }
 
 void event_source::terminate() {
+  if (at_least_one_db_)
+    serial_.send_end_db();
+  serial_.send_terminate();
+
   if (do_log_)
     print_db();
-  state_->terminate();
-}
-
-void event_source::print_db() {
-  if (!curr_db_.empty()) {
-    if (events_in_db_ != 0)
-      curr_db_.pop_back();
-    if (log_file_)
-      log_file_->print("{};\n", curr_db_);
-    else
-      fmt::print("{};\n", curr_db_);
-  }
-  curr_db_.clear();
-  events_in_db_ = 0;
 }
 
 void event_source::add_database(size_t timestamp) {
+  if (at_least_one_db_)
+    serial_.send_end_db();
+  serial_.send_begin_db(timestamp);
+  at_least_one_db_ = true;
+
   if (do_log_) {
     print_db();
-    curr_db_ += fmt::format("@{} ", timestamp);
+    curr_db_str_ += fmt::format("@{} ", timestamp);
   }
-  state_->start_new_database(timestamp);
+}
+
+void event_source::add_event(char *name, const c_ev_ty *tys,
+                             const c_ev_data *data, size_t arity) {
+  serial_.send_event(name, tys, data, arity);
+  if (do_log_)
+    print_event(name, tys, data, arity);
+}
+
+void event_source::print_db() {
+  if (!curr_db_str_.empty()) {
+    if (events_in_db_ != 0)
+      curr_db_str_.pop_back();
+    if (log_file_)
+      log_file_->print("{};\n", curr_db_str_);
+    else
+      fmt::print("{};\n", curr_db_str_);
+  }
+  curr_db_str_.clear();
+  events_in_db_ = 0;
 }
 
 void event_source::print_event_data(c_ev_ty ty, const c_ev_data &data) {
   if (ty == TY_INT)
-    curr_db_ += fmt::format("{},", data.i);
+    curr_db_str_ += fmt::format("{},", data.i);
   else if (ty == TY_FLOAT)
-    curr_db_ += fmt::format("{},", data.d);
+    curr_db_str_ += fmt::format("{},", data.d);
   else
-    curr_db_ += fmt::format("{},", data.s);
+    curr_db_str_ += fmt::format("\"{}\",", data.s);
 }
 
-void event_source::print_event(std::string_view name,
-                               std::span<const c_ev_ty> tys,
-                               std::span<const c_ev_data> data) {
-  assert(tys.size() == data.size());
-  size_t arity = tys.size();
-  curr_db_ += fmt::format("{}(", name);
+void event_source::print_event(char *name, const c_ev_ty *tys,
+                               const c_ev_data *data, size_t arity) {
+  curr_db_str_ += fmt::format("{}(", name);
   for (size_t i = 0; i < arity; ++i)
     print_event_data(tys[i], data[i]);
   if (arity != 0)
-    curr_db_.pop_back();
-  curr_db_ += ") ";
+    curr_db_str_.pop_back();
+  curr_db_str_ += ") ";
   events_in_db_++;
-}
-
-void event_source::add_event(std::string_view name,
-                             std::span<const c_ev_ty> tys,
-                             std::span<const c_ev_data> data) {
-  if (do_log_)
-    print_event(name, tys, data);
-  state_->add_c_event(name, tys, data);
 }
 }// namespace ipc

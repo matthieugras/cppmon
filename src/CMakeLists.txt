@@ -29,7 +29,7 @@ target_link_libraries(formula
 # Monitor
 add_library(monitor STATIC
     file_monitor_driver.cpp
-    shm_monitor_driver.cpp
+    uds_monitor_driver.cpp
     monitor_driver.cpp
     monitor.cpp
     aggregation_impl.cpp
@@ -46,12 +46,14 @@ target_link_libraries(monitor
     traceparser
     table
     formula
-    shm_shared_state)
+    socket_deserialization)
 
 # Main executable
 add_executable(cppmon cppmon.cpp)
 target_include_directories(cppmon PUBLIC
     ${MAIN_INCLUDES})
+
+install(TARGETS cppmon)
 
 if (USE_JEMALLOC)
   target_link_libraries(cppmon
