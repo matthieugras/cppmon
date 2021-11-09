@@ -12,11 +12,11 @@ pipeline {
         sh 'ci/compile.sh'
       }
     }
-    post {
-      success {
-        dir('install') {
-          archiveArtifacts artifacts: 'install/**/*.*', fingerprint: false
-        }
+  }
+  post {
+    success {
+      dir('install') {
+        archiveArtifacts artifacts: 'install/**/*.*', fingerprint: false
       }
     }
   }
