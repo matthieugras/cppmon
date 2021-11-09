@@ -16,7 +16,7 @@ pipeline {
   post {
     success {
       dir('install') {
-        archiveArtifacts artifacts: 'install/**/*.*', fingerprint: false
+        archiveArtifacts artifacts: '**', fingerprint: false
       }
     }
   }
