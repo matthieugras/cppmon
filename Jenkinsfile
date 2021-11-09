@@ -15,7 +15,7 @@ pipeline {
   }
   post {
     success {
-      archiveArtifacts artifacts: 'binaries/*', fingerprint: true
+      archiveArtifacts artifacts: 'install/**/*.*', fingerprint: true
     }
   }
 }
