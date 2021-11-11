@@ -117,6 +117,20 @@ int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name, const c_ev_ty *ev_types,
                   const c_ev_data *data, size_t arity);
 
 /*!
+ * Adds a database that contains a single event
+ * @param ctx Valid api context
+ * @param timestamp
+ * @param ev_name Name of the event
+ * @param ev_types Event argument types
+ * @param data Event arguments
+ * @param arity Number of event arguments
+ * @return -1 failure (sets last_err), 0 if successful
+ */
+int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp, char *ev_name,
+                            const c_ev_ty *ev_types, const c_ev_data *data,
+                            size_t arity);
+
+/*!
  * Get the last error
  * @param ctx Valid api context
  * @return A description of the last error, NULL if no such error occured

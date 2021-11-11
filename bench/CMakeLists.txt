@@ -8,7 +8,14 @@ target_link_libraries(uds_benchmark
     monitor
     socket_deserialization
     CONAN_PKG::fmt
+    CONAN_PKG::abseil
     CONAN_PKG::benchmark)
+
+if (USE_JEMALLOC)
+  target_link_libraries(uds_benchmark
+      CONAN_PKG::jemalloc)
+endif ()
+install(TARGETS uds_benchmark)
 
 add_executable(parse_benchmark
     parse_benchmark.cpp)

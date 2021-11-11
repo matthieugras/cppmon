@@ -72,6 +72,17 @@ EXPORT_C int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
   return -1;
 }
 
+EXPORT_C int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp,
+                                     char *ev_name, const c_ev_ty *ev_types,
+                                     const c_ev_data *data, size_t arity) {
+  int ret;
+  if ((ret = ev_src_add_db(ctx, timestamp)) < 0)
+    return ret;
+  if ((ret = ev_src_add_ev(ctx, ev_name, ev_types, data, arity)) < 0)
+    return ret;
+  return 0;
+}
+
 EXPORT_C const char *ev_src_last_err(ev_src_ctxt *ctx) {
   try {
     return ctx->get_error();
