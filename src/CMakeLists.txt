@@ -1,7 +1,7 @@
 add_subdirectory(common)
 add_subdirectory(parsing)
 add_subdirectory(abtesting)
-add_subdirectory(shm_monitor_interface)
+add_subdirectory(socket_interface)
 
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 
