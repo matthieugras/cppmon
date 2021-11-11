@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
-#include <shm_event_source.h>
+#include <socket_event_source.h>
 #include <stdexcept>
 #include <stdlib.h>
 
@@ -14,9 +14,11 @@ EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
                                   : "cppmon_uds";
     if (options->log_path)
       return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
+                                   options->flags.unbounded_buf,
                                    std::string(options->log_path));
     else
-      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path);
+      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
+                                   options->flags.unbounded_buf);
   } catch (const std::exception &e) {
     fmt::print(stderr,
                "failed to initialize context because of exception: {}\n"
@@ -90,9 +92,10 @@ const char *event_source::get_error() const {
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,
-                           const std::string &socket_path, std::string log_path)
+                           const std::string &socket_path,
+                           bool unbounded_buffer, std::string log_path)
     : events_in_db_(0), do_log_(false), at_least_one_db_(false),
-      serial_(socket_path) {
+      serial_(socket_path, unbounded_buffer) {
   if (log_to_file || log_to_stdout)
     do_log_ = true;
   if (log_to_file)

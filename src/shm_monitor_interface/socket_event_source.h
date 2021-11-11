@@ -1,5 +1,5 @@
-#ifndef CPPMON_SHM_EVENT_SOURCE_H
-#define CPPMON_SHM_EVENT_SOURCE_H
+#ifndef CPPMON_SOCKET_EVENT_SOURCE_H
+#define CPPMON_SOCKET_EVENT_SOURCE_H
 
 #include <c_event_types.h>
 #include <cstddef>
@@ -17,6 +17,7 @@ extern "C" {
 typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
+  int unbounded_buf : 1;
 } ev_src_init_flags;
 
 typedef struct {
@@ -51,7 +52,7 @@ namespace ipc {
 class event_source {
 public:
   event_source(bool log_to_file, bool log_to_stdout,
-               const std::string &socket_path,
+               const std::string &socket_path, bool unbounded_buffer,
                std::string log_path = "output.log");
 
   void set_error(std::string s);
@@ -76,4 +77,4 @@ private:
 };
 }// namespace ipc
 
-#endif// CPPMON_SHM_EVENT_SOURCE_H
+#endif// CPPMON_SOCKET_EVENT_SOURCE_H

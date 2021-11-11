@@ -16,7 +16,7 @@ target_link_libraries(socket_deserialization PUBLIC
     traceparser
     common)
 
-add_library(cppmon_event_source SHARED shm_event_source.cpp)
+add_library(cppmon_event_source SHARED socket_event_source.cpp)
 target_include_directories(cppmon_event_source
     PRIVATE ${SHM_INCLUDES}
     INTERFACE ${SHM_EXPORT_INTERFACE})

@@ -21,6 +21,7 @@ typedef union {
 typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
+  int unbounded_buf : 1;
 } ev_src_init_flags;
 
 typedef struct {
