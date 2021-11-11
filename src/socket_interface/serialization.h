@@ -8,10 +8,10 @@
 #include <c_event_types.h>
 #include <condition_variable>
 #include <fmt/format.h>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <semaphore>
 #include <serialization_types.h>
 #include <thread>
 #include <vector>
@@ -20,7 +20,8 @@ namespace ipc::serialization {
 
 class serializer {
 public:
-  serializer(const std::string &socket_path, bool unbounded_buffering = false);
+  serializer(const std::string &socket_path, size_t wbuf_size,
+             bool unbounded_buffering = false);
   void send_string(const char *str);
   void send_event_data(c_ev_ty ty, const c_ev_data &data);
   void send_event(const char *name, const c_ev_ty *tys, const c_ev_data *data,
@@ -42,6 +43,7 @@ private:
       boost::asio::write(wstream_,
                          boost::asio::const_buffer(val_as_bytes, sizeof(T)));
   }
+  size_t wbuf_size_;
   boost::asio::io_context ctx_;
   boost::asio::buffered_write_stream<
     boost::asio::local::stream_protocol::socket>
@@ -51,7 +53,7 @@ private:
   std::mutex buf_mut_;
   std::condition_variable cond_;
   bool unbounded_buf_, has_data_, is_done_, should_read_;
-  std::optional<std::thread> worker_;
+  std::optional<std::future<void>> worker_;
 };
 }// namespace ipc::serialization
 

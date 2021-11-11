@@ -1,21 +1,22 @@
 #include <serialization.h>
 
 namespace ipc::serialization {
-serializer::serializer(const std::string &socket_path, bool unbounded_buffering)
-    : wstream_(ctx_, 5000), sock_(ctx_), unbounded_buf_(unbounded_buffering),
-      has_data_(false), is_done_(false), should_read_(false) {
+serializer::serializer(const std::string &socket_path, size_t wbuf_size,
+                       bool unbounded_buffering)
+    : wbuf_size_(wbuf_size), wstream_(ctx_, wbuf_size_), sock_(ctx_),
+      unbounded_buf_(unbounded_buffering), has_data_(false), is_done_(false),
+      should_read_(false) {
   if (unbounded_buf_)
     sock_.connect(socket_path);
   else
     wstream_.lowest_layer().connect(socket_path);
   if (unbounded_buf_)
-    worker_.emplace(std::thread(&serializer::worker_fun, this));
+    worker_.emplace(
+      std::async(std::launch::async, &serializer::worker_fun, this));
 }
 
 void serializer::worker_fun() {
-  size_t bla = 0;
   while (true) {
-    bla++;
     std::unique_lock lk(buf_mut_);
     while (!should_read_ && !is_done_)
       cond_.wait(lk);
@@ -44,7 +45,7 @@ void serializer::send_to_buffer(const char *data, size_t len) {
   boost::asio::buffer_copy(new_buf, boost::asio::const_buffer(data, len));
   buf_.commit(len);
   has_data_ = true;
-  if (!should_read_ && buf_.size() > 10000) {
+  if (!should_read_ && buf_.size() > wbuf_size_) {
     should_read_ = true;
     cond_.notify_one();
   }
@@ -94,7 +95,7 @@ void serializer::send_terminate() {
     is_done_ = true;
     cond_.notify_one();
     lk.unlock();
-    worker_->join();
+    worker_->get();
   } else {
     wstream_.flush();
     wstream_.lowest_layer().shutdown(boost::asio::socket_base::shutdown_send);

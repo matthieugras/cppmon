@@ -1,5 +1,5 @@
 /*
- * compile with: gcc -O3 -g -Wall -Wextra -I install/include install/lib/libcppmon_event_source.so unix_socket_interface.c -o main
+ * compile with: gcc -O3 -g -Wall -Wextra -I install/include install/lib/libcppmon_event_source.so main.c -o main
  */
 
 #include <stdio.h>
@@ -50,8 +50,17 @@ int add_random_event(ev_src_ctxt *ctx) {
 
 int main() {
   int ret;
-  ev_src_init_flags flags = {0, 0, 0};
-  ev_src_init_opts opts = {flags, "input_log", NULL};
+  ev_src_init_flags flags = {
+    .log_to_file = 0,
+    .log_to_stdout = 0,
+    .unbounded_buf = 0
+  };
+  ev_src_init_opts opts = {
+    flags,
+    .wbuf_size = 6000,
+    .log_path = "input_log",
+    .uds_sock_path = NULL
+  };
   ev_src_ctxt *ctx = ev_src_init(&opts);
 
   for (size_t i = 0; i < 1000000; ++i) {
@@ -69,7 +78,7 @@ int main() {
   ev_src_free(ctx);
   return 0;
   failure_string:
-    fprintf(stderr, "%s\n", ev_src_last_err(ctx));
+    fprintf(stderr, "cerr %s\n", ev_src_last_err(ctx));
     ev_src_free(ctx);
     return 1;
 }

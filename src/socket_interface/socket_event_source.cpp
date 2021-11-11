@@ -13,11 +13,12 @@ EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
                                   ? std::string(options->uds_sock_path)
                                   : "cppmon_uds";
     if (options->log_path)
-      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
-                                   options->flags.unbounded_buf,
-                                   std::string(options->log_path));
+      return new ipc::event_source(
+        log_to_file, log_to_stdout, uds_sock_path, options->wbuf_size,
+        options->flags.unbounded_buf, std::string(options->log_path));
     else
       return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
+                                   options->wbuf_size,
                                    options->flags.unbounded_buf);
   } catch (const std::exception &e) {
     fmt::print(stderr,
@@ -92,10 +93,10 @@ const char *event_source::get_error() const {
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,
-                           const std::string &socket_path,
+                           const std::string &socket_path, size_t wbuf_size,
                            bool unbounded_buffer, std::string log_path)
     : events_in_db_(0), do_log_(false), at_least_one_db_(false),
-      serial_(socket_path, unbounded_buffer) {
+      serial_(socket_path, wbuf_size, unbounded_buffer) {
   if (log_to_file || log_to_stdout)
     do_log_ = true;
   if (log_to_file)

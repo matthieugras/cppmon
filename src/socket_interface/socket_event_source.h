@@ -22,6 +22,7 @@ typedef struct {
 
 typedef struct {
   ev_src_init_flags flags;
+  size_t wbuf_size;
   char *log_path;
   char *uds_sock_path;
 } ev_src_init_opts;
@@ -52,8 +53,8 @@ namespace ipc {
 class event_source {
 public:
   event_source(bool log_to_file, bool log_to_stdout,
-               const std::string &socket_path, bool unbounded_buffer,
-               std::string log_path = "output.log");
+               const std::string &socket_path, size_t wbuf_size,
+               bool unbounded_buffer, std::string log_path = "output.log");
 
   void set_error(std::string s);
   const char *get_error() const;
