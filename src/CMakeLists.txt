@@ -1,6 +1,6 @@
 add_subdirectory(common)
 add_subdirectory(parsing)
-add_subdirectory(abtesting)
+add_subdirectory(differential_testing)
 add_subdirectory(socket_interface)
 
 set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
