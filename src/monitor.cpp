@@ -75,8 +75,9 @@ MState::init_pair MState::init_eq_state(const fo::Formula::eq_t &arg) {
   }
   assert(l.is_var() && rcst || lcst && r.is_var());
   if (l.is_var())
-    std::swap(lcst, rcst);
-  return {MRel{event_table::singleton_table(*lcst)}, {0}};
+    return {MRel{event_table::singleton_table(*rcst)}, {*l.get_if_var()}};
+  else
+    return {MRel{event_table::singleton_table(*lcst)}, {*r.get_if_var()}};
 }
 
 MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
@@ -110,7 +111,7 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
     phir = neg_ptr;
   }
 
-  const fo::Term *t1 = nullptr, *t2 = nullptr;
+  const fo::Term *t1, *t2;
   auto cst_type = MAndRel::CST_EQ;
   if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&phir->val)) {
     t1 = &ptr->l;
@@ -127,9 +128,10 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
   } else {
     throw std::runtime_error("unknown constraint");
   }
-  vector<size_t> var_2_idx(rec_layout.size());
+  vector<size_t> var_2_idx(phil.degree(), 1000);
   for (size_t i = 0; i < rec_layout.size(); ++i)
     var_2_idx[rec_layout[i]] = i;
+  // fmt::print("for constraint, var_2_idx is: {}\n", var_2_idx);
   return {MAndRel{uniq(std::move(rec_state)), std::move(var_2_idx), *t1, *t2,
                   cst_type, cst_neg},
           std::move(rec_layout)};
@@ -187,7 +189,7 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
                            arg.pred_args,
                            std::move(var_pos),
                            std::move(pos_2_cst)};
-  //mpred_state.print_state();
+  // mpred_state.print_state();
   return {std::move(mpred_state), lay};
 }
 
@@ -433,8 +435,10 @@ event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
       ret = l_res == r_res;
     else if (cst_type == CST_LESS)
       ret = l_res < r_res;
-    else
+    else {
+      assert(cst_type == CST_LESS_EQ);
       ret = l_res <= r_res;
+    }
     if (cst_neg)
       ret = !ret;
     return ret;
@@ -446,10 +450,14 @@ event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
 }
 
 event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
+  // fmt::print("on call, past_ts is: {}\n", past_ts);
   auto rec_tabs = state->eval(db, ts);
+  // fmt::print("rec_tabs is: {}\n", rec_tabs);
   past_ts.insert(past_ts.end(), ts.begin(), ts.end());
-  if (rec_tabs.empty())
+  if (rec_tabs.empty()) {
+    // fmt::print("on return 1, past_ts is: {}\n", past_ts);
     return rec_tabs;
+  }
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size() + 1);
   auto tabs_it = rec_tabs.begin();
@@ -460,21 +468,30 @@ event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
     is_first = false;
   }
 
-  if (tabs_it == rec_tabs.end())
+  if (tabs_it == rec_tabs.end()) {
+    // fmt::print("on return 2, past_ts is: {}\n", past_ts);
     return res_tabs;
+  }
 
   assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
+  // fmt::print("first if, interval diff is {}\n", past_ts[1] - past_ts[0]);
   if (inter.contains(past_ts[1] - past_ts[0]))
     res_tabs.push_back(std::move(buf));
+  else
+    res_tabs.push_back(event_table(num_fvs));
+  past_ts.pop_front();
 
   for (; (tabs_it + 1) < rec_tabs.end(); past_ts.pop_front(), ++tabs_it) {
+    // fmt::print("interval diff is {}", past_ts[1] - past_ts[0]);
     assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
     if (inter.contains(past_ts[1] - past_ts[0]))
       res_tabs.push_back(*tabs_it);
     else
       res_tabs.push_back(event_table(num_fvs));
   }
+  // fmt::print("returning\n");
   buf = std::move(*tabs_it);
+  // fmt::print("on return 3, past_ts is: {}\n", past_ts);
   return res_tabs;
 }
 
