@@ -1,7 +1,9 @@
 #ifndef CPPMON_DIFFERENTIAL_TEST_H
 #define CPPMON_DIFFERENTIAL_TEST_H
 
+#include <atomic>
 #include <boost/filesystem.hpp>
+#include <semaphore>
 
 namespace testing {
 class differential_test {
@@ -11,14 +13,15 @@ public:
                     boost::filesystem::path gen_fma,
                     boost::filesystem::path trace_gen,
                     boost::filesystem::path replayer);
-  [[noreturn]] void run_tests();
+  void run_tests();
 
 private:
-  void run_single_test(size_t iter_num);
+  void run_single_test(size_t iter_num, boost::filesystem::path wdir);
   void gen_sig_formula(const boost::filesystem::path &wdir);
   void gen_trace(const boost::filesystem::path &wdir);
   bool run_monitors(const boost::filesystem::path &wdir);
   boost::filesystem::path cppmon_, monpoly_, gen_fma_, trace_gen_, replayer_;
+  std::unique_ptr<std::counting_semaphore<>> free_slots_;
 };
 }// namespace testing
 
