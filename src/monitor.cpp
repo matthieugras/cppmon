@@ -100,6 +100,15 @@ MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
   }
 }
 
+static vector<size_t> get_sparse_var_2_idx(const table_layout &lay) {
+  size_t res_size =
+    lay.size() == 0 ? 0 : (*std::max_element(lay.cbegin(), lay.cend()) + 1);
+  vector<size_t> var_2_idx(res_size);
+  for (size_t i = 0; i < lay.size(); ++i)
+    var_2_idx[lay[i]] = i;
+  return var_2_idx;
+}
+
 MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
   const auto &phil = *arg.phil;
   const auto *phir = arg.phir.get();
@@ -128,9 +137,7 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
   } else {
     throw std::runtime_error("unknown constraint");
   }
-  vector<size_t> var_2_idx(phil.degree());
-  for (size_t i = 0; i < rec_layout.size(); ++i)
-    var_2_idx[rec_layout[i]] = i;
+  auto var_2_idx = get_sparse_var_2_idx(rec_layout);
   // fmt::print("for constraint, var_2_idx is: {}\n", var_2_idx);
   return {MAndRel{uniq(std::move(rec_state)), std::move(var_2_idx), *t1, *t2,
                   cst_type, cst_neg},
@@ -164,11 +171,10 @@ MState::init_pair MState::init_and_safe_assign(const fo::Formula &phil,
       new_var = *r.get_if_var();
       trm_to_eval = &l;
     }
-    vector<size_t> var_2_idx(phil.degree());
-    for (size_t i = 0; i < rec_layout.size(); ++i)
-      var_2_idx[rec_layout[i]] = i;
+    auto var_2_idx = get_sparse_var_2_idx(rec_layout);
     rec_layout.push_back(new_var);
-    //fmt::print("rec_layout and assign: {}, nfvs: {}\n", rec_layout, rec_layout.size());
+    // fmt::print("rec_layout and assign: {}, nfvs: {}\n", rec_layout,
+    // rec_layout.size());
     return {MAndAssign{uniq(std::move(rec_state)), std::move(var_2_idx),
                        *trm_to_eval, rec_layout.size()},
             std::move(rec_layout)};
@@ -490,7 +496,7 @@ event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
 event_table_vec MState::MAndAssign::eval(const database &db,
                                          const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
-  //fmt::print("MAndAssign::eval rec_tabs: {}\n", rec_tabs);
+  // fmt::print("MAndAssign::eval rec_tabs: {}\n", rec_tabs);
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
   for (const auto &tab : rec_tabs) {
@@ -498,9 +504,9 @@ event_table_vec MState::MAndAssign::eval(const database &db,
     for (const auto &row : tab) {
       auto row_cp = row;
       auto trm_eval = t.eval(var_2_idx, row);
-      //fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
+      // fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
       row_cp.push_back(std::move(trm_eval));
-      //fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
+      // fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
       new_tab.add_row(std::move(row_cp));
     }
     res_tabs.push_back(std::move(new_tab));
