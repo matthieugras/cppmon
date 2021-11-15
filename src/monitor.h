@@ -118,8 +118,14 @@ namespace detail {
       event_table_vec eval(const database &db, const ts_list &ts);
     };
 
-    // TODO: implement this later together with meval
-    struct MAndAssign {};
+
+    struct MAndAssign {
+      ptr_type<MState> state;
+      vector<size_t> var_2_idx;
+      fo::Term t;
+      size_t nfvs;
+      event_table_vec eval(const database &db, const ts_list &ts);
+    };
 
     struct MAndRel {
       ptr_type<MState> state;
@@ -186,10 +192,11 @@ namespace detail {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
-          //fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l, tab_r, new_ts);
+          // fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l,
+          // tab_r, new_ts);
           auto ret = impl.eval(tab_l, tab_r, new_ts);
-          //fmt::print("state after call:\n");
-          //impl.print_state();
+          // fmt::print("state after call:\n");
+          // impl.print_state();
           return ret;
         };
         auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state,
@@ -273,6 +280,9 @@ namespace detail {
                                          const fo::Formula &phir,
                                          bool right_negated);
     static init_pair init_and_rel_state(const fo::Formula::and_t &arg);
+
+    static init_pair init_and_safe_assign(const fo::Formula &phil,
+                                          const fo::Formula &phir);
 
     static init_pair init_exists_state(const fo::Formula::exists_t &arg);
 

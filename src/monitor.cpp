@@ -52,10 +52,10 @@ event_table_vec MState::eval(const database &db, const ts_list &ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MExists, MRel, MAndRel,
-                                   MAnd, MOr, MNext, MPrev, MSince<since_impl>,
-                                   MSince<since_agg_impl>, MOnce<once_impl>,
-                                   MOnce<once_agg_impl>, MUntil, MEventually,
-                                   MAgg>) {
+                                   MAndAssign, MAnd, MOr, MNext, MPrev,
+                                   MSince<since_impl>, MSince<since_agg_impl>,
+                                   MOnce<once_impl>, MOnce<once_agg_impl>,
+                                   MUntil, MEventually, MAgg>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
@@ -128,7 +128,7 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
   } else {
     throw std::runtime_error("unknown constraint");
   }
-  vector<size_t> var_2_idx(phil.degree(), 1000);
+  vector<size_t> var_2_idx(phil.degree());
   for (size_t i = 0; i < rec_layout.size(); ++i)
     var_2_idx[rec_layout[i]] = i;
   // fmt::print("for constraint, var_2_idx is: {}\n", var_2_idx);
@@ -137,11 +137,50 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
           std::move(rec_layout)};
 }
 
+MState::init_pair MState::init_and_safe_assign(const fo::Formula &phil,
+                                               const fo::Formula &phir) {
+  auto [rec_state, rec_layout] = init_mstate(phil);
+  auto fv_l = phil.fvs();
+  if (const auto *eq_ptr = var2::get_if<fo::Formula::eq_t>(&phir.val)) {
+    const Term &l = eq_ptr->l, &r = eq_ptr->r;
+    size_t new_var;
+    const Term *trm_to_eval;
+    if (l.is_var() && r.is_var()) {
+      bool l_not_new_var = is_subset({*l.get_if_var()}, fv_l),
+           r_not_new_var = is_subset({*r.get_if_var()}, fv_l);
+      assert(l_not_new_var ^ r_not_new_var);
+      if (l_not_new_var) {
+        new_var = *r.get_if_var();
+        trm_to_eval = &l;
+      } else {
+        new_var = *l.get_if_var();
+        trm_to_eval = &r;
+      }
+    } else if (l.is_var()) {
+      new_var = *l.get_if_var();
+      trm_to_eval = &r;
+    } else {
+      assert(r.is_var());
+      new_var = *r.get_if_var();
+      trm_to_eval = &l;
+    }
+    vector<size_t> var_2_idx(phil.degree());
+    for (size_t i = 0; i < rec_layout.size(); ++i)
+      var_2_idx[rec_layout[i]] = i;
+    rec_layout.push_back(new_var);
+    //fmt::print("rec_layout and assign: {}, nfvs: {}\n", rec_layout, rec_layout.size());
+    return {MAndAssign{uniq(std::move(rec_state)), std::move(var_2_idx),
+                       *trm_to_eval, rec_layout.size()},
+            std::move(rec_layout)};
+  } else {
+    throw std::runtime_error("unsupported fragment");
+  }
+}
 
 MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
   const auto &phil = *arg.phil, &phir = *arg.phir;
   if (phir.is_safe_assignment(phil.fvs())) {
-    throw not_implemented_error();
+    return init_and_safe_assign(*arg.phil, *arg.phir);
   } else if (phir.is_safe_formula()) {
     return init_and_join_state(*arg.phil, *arg.phir, false);
   } else if (phir.is_constraint()) {
@@ -155,7 +194,6 @@ MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
 }
 
 MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
-
   size_t n_args = arg.pred_args.size();
   MPred::pred_ty pred_ty;
   if (arg.pred_name == "tp" && n_args == 1)
@@ -446,6 +484,27 @@ event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
   std::transform(
     rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res_tabs),
     [filter_fn](const auto &tab) { return tab.filter(filter_fn); });
+  return res_tabs;
+}
+
+event_table_vec MState::MAndAssign::eval(const database &db,
+                                         const ts_list &ts) {
+  auto rec_tabs = state->eval(db, ts);
+  //fmt::print("MAndAssign::eval rec_tabs: {}\n", rec_tabs);
+  event_table_vec res_tabs;
+  res_tabs.reserve(rec_tabs.size());
+  for (const auto &tab : rec_tabs) {
+    event_table new_tab(nfvs);
+    for (const auto &row : tab) {
+      auto row_cp = row;
+      auto trm_eval = t.eval(var_2_idx, row);
+      //fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
+      row_cp.push_back(std::move(trm_eval));
+      //fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
+      new_tab.add_row(std::move(row_cp));
+    }
+    res_tabs.push_back(std::move(new_tab));
+  }
   return res_tabs;
 }
 
