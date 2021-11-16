@@ -1,6 +1,8 @@
 #ifndef TRACEPARSER_H
 #define TRACEPARSER_H
 
+#define LEXY_IGNORE_DEPRECATED_OPT_LIST 1
+
 #include <absl/container/flat_hash_map.h>
 #include <boost/serialization/strong_typedef.hpp>
 #include <charconv>
@@ -10,6 +12,7 @@
 #include <iterator>
 #include <lexy/callback.hpp>
 #include <lexy/dsl.hpp>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <type_traits>
@@ -17,7 +20,6 @@
 #include <vector>
 
 namespace parse {
-
 #define RULE static constexpr auto rule =
 #define VALUE static constexpr auto value =
 
@@ -100,14 +102,15 @@ private:
 
   struct sig_parse {
     static constexpr auto whitespace = dsl::ascii::blank / dsl::ascii::newline;
-    RULE dsl::list(dsl::peek_not(dsl::eof) >> dsl::p<pred_sig>);
-    static constexpr auto fold_fn = [](signature &sig,
-                                       pred_sig::res_type &&psig) {
-      if (!sig.insert(std::move(psig)).second)
-        throw std::runtime_error("duplicate predicate");
-    };
-    VALUE
-    lexy::fold_inplace<signature>(std::initializer_list<signature::init_type>{},
+
+    RULE dsl::opt_list(dsl::peek_not(dsl::eof) >> dsl::p<pred_sig>);
+    static constexpr auto fold_fn =
+      [](signature &sig, pred_sig::res_type &&psig) {
+        if (!sig.insert(std::move(psig)).second)
+          throw std::runtime_error("duplicate predicate");
+      };
+
+    VALUE lexy::fold_inplace<signature>(std::initializer_list<signature::init_type>{},
                                   fold_fn);
   };
 };
