@@ -105,13 +105,18 @@ class shared_base : public AggBase {
 protected:
   using table_buf = boost::container::devector<std::pair<size_t, event_table>>;
 
-  // map: tuple -> (ts, counter)
-  using counted_tuple_buf = absl::flat_hash_map<std::vector<common::event_data>,
-                                                std::pair<size_t, size_t>>;
-
   template<typename... Args>
   shared_base(size_t nfvs, fo::Interval inter, Args &&...args)
       : AggBase(std::forward<Args>(args)...), nfvs(nfvs), inter(inter) {}
+
+  void drop_tuple_from_all_data(const event &e) {
+    auto all_dat_it = all_data_counted.find(e);
+    assert(all_dat_it != all_data_counted.end() && all_dat_it->second > 0);
+    if ((--all_dat_it->second) == 0) {
+      tuple_since.erase(all_dat_it->first);
+      all_data_counted.erase(all_dat_it);
+    }
+  }
 
   void drop_too_old(size_t ts) {
     for (; !data_in.empty(); data_in.pop_front()) {
@@ -124,30 +129,14 @@ protected:
         auto in_it = tuple_in.find(e);
         if (in_it != tuple_in.end() && in_it->second == tab.first)
           this->tuple_in_erase(in_it);
+        drop_tuple_from_all_data(e);
       }
-      //fmt::print("moving data_in with ts {} to garbage\n", old_ts);
-      garbage.emplace_back(std::move(tab.second));
     }
     for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
          data_prev.pop_front()) {
-      /*fmt::print("moving data_prev with ts {} to garbage\n",
-                 data_prev.front().first);*/
-      garbage.emplace_back(std::move(data_prev.front().second));
+      for (const auto &e : data_prev.front().second)
+        drop_tuple_from_all_data(e);
     }
-  }
-
-  void clean_garbage() {
-    for (const auto &tab : garbage) {
-      for (const auto &e : tab) {
-        auto since_it = tuple_since.find(e);
-        assert(since_it == tuple_since.end() || since_it->second.second > 0);
-        if (since_it != tuple_since.end() && ((--since_it->second.second) == 0)) {
-          //fmt::print("erasing elem ({}, {}) from tuple_since", since_it->first, since_it->second);
-          tuple_since.erase(since_it);
-        }
-      }
-    }
-    garbage.clear();
   }
 
   void add_new_ts(size_t ts) {
@@ -160,22 +149,18 @@ protected:
         break;
       for (const auto &e : latest.second) {
         auto since_it = tuple_since.find(e);
-        if (since_it != tuple_since.end() && since_it->second.first <= old_ts)
+        if (since_it != tuple_since.end() && since_it->second <= old_ts)
           this->tuple_in_update(e, old_ts);
       }
       assert(data_in.empty() || old_ts >= data_in.back().first);
       data_in.push_back(std::move(latest));
     }
-    clean_garbage();
   }
 
   void add_new_table(event_table &&tab_r, size_t ts) {
     for (const auto &e : tab_r) {
-      auto since_it = tuple_since.find(e);
-      if (since_it == tuple_since.end())
-        tuple_since.emplace(e, std::pair(ts, 1));
-      else
-        since_it->second.second++;
+      tuple_since.try_emplace(e, ts);
+      all_data_counted[e]++;
     }
     if (inter.contains(0)) {
       for (const auto &e : tab_r)
@@ -191,9 +176,7 @@ protected:
   size_t nfvs;
   fo::Interval inter;
   table_buf data_prev, data_in;
-  boost::container::devector<event_table> garbage;
-  tuple_buf tuple_in;
-  counted_tuple_buf tuple_since;
+  tuple_buf tuple_in, tuple_since, all_data_counted;
 };
 
 template<typename SinceBase>
