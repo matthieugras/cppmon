@@ -124,21 +124,30 @@ protected:
         auto in_it = tuple_in.find(e);
         if (in_it != tuple_in.end() && in_it->second == tab.first)
           this->tuple_in_erase(in_it);
-        auto since_it = tuple_since.find(e);
-        assert(since_it == tuple_since.end() || since_it->second.second > 0);
-        if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
-          tuple_since.erase(since_it);
       }
+      //fmt::print("moving data_in with ts {} to garbage\n", old_ts);
+      garbage.emplace_back(std::move(tab.second));
     }
     for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
          data_prev.pop_front()) {
-      for (const auto &e : data_prev.front().second) {
+      /*fmt::print("moving data_prev with ts {} to garbage\n",
+                 data_prev.front().first);*/
+      garbage.emplace_back(std::move(data_prev.front().second));
+    }
+  }
+
+  void clean_garbage() {
+    for (const auto &tab : garbage) {
+      for (const auto &e : tab) {
         auto since_it = tuple_since.find(e);
         assert(since_it == tuple_since.end() || since_it->second.second > 0);
-        if (since_it != tuple_since.end() && ((--since_it->second.second) == 0))
+        if (since_it != tuple_since.end() && ((--since_it->second.second) == 0)) {
+          //fmt::print("erasing elem ({}, {}) from tuple_since", since_it->first, since_it->second);
           tuple_since.erase(since_it);
+        }
       }
     }
+    garbage.clear();
   }
 
   void add_new_ts(size_t ts) {
@@ -157,6 +166,7 @@ protected:
       assert(data_in.empty() || old_ts >= data_in.back().first);
       data_in.push_back(std::move(latest));
     }
+    clean_garbage();
   }
 
   void add_new_table(event_table &&tab_r, size_t ts) {
@@ -181,6 +191,7 @@ protected:
   size_t nfvs;
   fo::Interval inter;
   table_buf data_prev, data_in;
+  boost::container::devector<event_table> garbage;
   tuple_buf tuple_in;
   counted_tuple_buf tuple_since;
 };
@@ -221,6 +232,7 @@ template<typename OnceBase>
 class once_base : public OnceBase {
 public:
   event_table eval(event_table &tab_r, size_t new_ts) {
+    // fmt::print("calling eval with table: {}\n", tab_r);
     this->add_new_ts(new_ts);
     this->add_new_table(std::move(tab_r), new_ts);
     return this->produce_result();
@@ -248,7 +260,11 @@ class once_impl : public once_base<shared_base<shared_no_agg<once_impl>>> {
 public:
   once_impl(size_t nfvs, fo::Interval inter);
 
-  void print_state() {}
+  void print_state() {
+    fmt::print("once_impl state: data_prev: {}, data_in {}, tuple_in: {}, "
+               "tuple_since: {}\n",
+               data_prev, data_in, tuple_in, tuple_since);
+  }
 };
 
 class since_agg_impl
@@ -258,7 +274,12 @@ public:
                  fo::Interval inter,
                  agg_temporal::temporal_aggregation_impl temporal_agg);
 
-  void print_state() {}
+  void print_state() {
+    fmt::print("since_impl state: left_negated: {}, comm_idx_r: {}, data_prev: "
+               "{}, data_in {}, tuple_in: {}, tuple_since: {}\n",
+               left_negated, comm_idx_r, data_prev, data_in, tuple_in,
+               tuple_since);
+  }
 };
 
 class once_agg_impl
