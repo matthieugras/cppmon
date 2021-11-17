@@ -3,8 +3,10 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/process.hpp>
+#include <boost/system/error_code.hpp>
 #include <cstdio>
 #include <differential_test.h>
+#include <error.h>
 #include <fmt/format.h>
 #include <stdexcept>
 
@@ -47,10 +49,11 @@ static fs::path working_dir() {
 }
 
 void differential_test::gen_sig_formula(const fs::path &wdir) {
-  const size_t MAX_ITERS = 100;
+  const size_t MAX_ITERS = 200;
   for (size_t i = 0;; ++i) {
     if (bp::system(bp::start_dir(wdir), gen_fma_, "-output", "bla", "-size",
-                   "1", bp::std_out > bp::null,
+                   "4", "-free_vars", "5", "-max_interval", "20",
+                   bp::std_out > bp::null,
                    bp::std_err > "gen_fma_stderr") != 0) {
       throw std::runtime_error("failed to generate signature/formula pair");
     }
@@ -59,8 +62,12 @@ void differential_test::gen_sig_formula(const fs::path &wdir) {
                  "-sig", "bla.sig", "-formula", "bla.mfotl",
                  bp::std_err > (wdir / "convert_formula_stderr"),
                  bp::std_out > (wdir / "bla.json"));
-    if (!ret)
+    if (!ret && !fs::is_empty(wdir / "bla.sig")) {
       break;
+    } else {
+      boost::system::error_code ec;
+      fs::remove(wdir / "bla.json", ec);
+    }
     if (i >= MAX_ITERS)
       throw std::runtime_error(fmt::format(
         "failed to generate valid formula after {} iterations", MAX_ITERS));
@@ -68,8 +75,8 @@ void differential_test::gen_sig_formula(const fs::path &wdir) {
 }
 
 void differential_test::gen_trace(const fs::path &wdir) {
-  if (bp::system(bp::start_dir(wdir), trace_gen_, "10", "-e", "10", "-i", "5",
-                 "-sig", "bla.sig", "-dom", "42",
+  if (bp::system(bp::start_dir(wdir), trace_gen_, "60", "-e", "20", "-i", "2",
+                 "-sig", "bla.sig", "-dom", "20",
                  bp::std_out > (wdir / "raw_trace"),
                  bp::std_err > (wdir / "trace_gen_stderr")) != 0)
     throw std::runtime_error("failed to generate trace");
@@ -80,18 +87,21 @@ void differential_test::gen_trace(const fs::path &wdir) {
 }
 
 bool differential_test::run_monitors(const fs::path &wdir) {
-  int monpoly_ret = bp::system(
-    bp::start_dir(wdir), monpoly_, "-verified", "-sig", "bla.sig", "-formula",
-    "bla.mfotl", "-log", "bla.log", bp::std_out > (wdir / "monpoly_out"),
-    bp::std_err > (wdir / "monpoly_stderr"));
-  if (monpoly_ret)
+  int monpoly_ret =
+    bp::system(bp::start_dir(wdir), monpoly_, /*"-verified",*/ "-sig",
+               "bla.sig", "-formula", "bla.mfotl", "-log", "bla.log",
+               bp::std_out > (wdir / "monpoly_out"),
+               bp::std_err > (wdir / "monpoly_stderr"));
+  if (monpoly_ret) {
+    fmt::print(stderr, "monpoly returned non-empty exit code\n");
     return false;
+  }
   int cppmon_ret = bp::system(bp::start_dir(wdir), cppmon_, "--sig", "bla.sig",
                               "--formula", "bla.json", "--log", "bla.log",
                               bp::std_out > (wdir / "cppmon_out"),
                               bp::std_err > (wdir / "cppmon_stderr"));
   if (cppmon_ret) {
-    fmt::print(stderr, "cppmon returned non-zero exit code\n");
+    fmt::print(stderr, "cppmon returned non-zero exit code\n", wdir.string());
     return false;
   }
   int differ = bp::system(
@@ -118,9 +128,11 @@ void differential_test::run_single_test(size_t iter_num, fs::path wdir) {
 }
 
 void differential_test::run_tests() {
-  boost::asio::thread_pool pool(10);
+  boost::asio::thread_pool pool(13);
   free_slots_ = std::make_unique<std::counting_semaphore<>>(30);
-  for (size_t iter_num = 0;; ++iter_num) {
+  for (size_t iter_num = 0; iter_num < 100000; ++iter_num) {
+    if (iter_num % 1000 == 0)
+      fmt::print("iteration {}\n", iter_num);
     free_slots_->acquire();
     fs::path wdir = working_dir();
     if (!fs::create_directory(wdir))

@@ -192,11 +192,10 @@ namespace detail {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
-          // fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l,
-          // tab_r, new_ts);
+          //fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l, tab_r, new_ts);
           auto ret = impl.eval(tab_l, tab_r, new_ts);
-          // fmt::print("state after call:\n");
-          // impl.print_state();
+          /*fmt::print("state after call:\n");
+          impl.print_state();*/
           return ret;
         };
         auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state,
@@ -220,7 +219,11 @@ namespace detail {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
-          res.push_back(impl.eval(tab, new_ts));
+          //fmt::print("calling impl with tabl: {}, ts: {}\n", tab, new_ts);
+          auto ret = impl.eval(tab, new_ts);
+          /*fmt::print("state after call:\n");
+          impl.print_state();*/
+          res.push_back(std::move(ret));
         }
         return res;
       }

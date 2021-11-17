@@ -215,7 +215,6 @@ template<typename OnceBase>
 class once_base : public OnceBase {
 public:
   event_table eval(event_table &tab_r, size_t new_ts) {
-    // fmt::print("calling eval with table: {}\n", tab_r);
     this->add_new_ts(new_ts);
     this->add_new_table(std::move(tab_r), new_ts);
     return this->produce_result();
