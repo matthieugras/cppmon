@@ -270,7 +270,7 @@ MState::init_pair MState::init_prev_state(const fo::Formula::prev_t &arg) {
   auto [rec_state, rec_layout] = init_mstate(*arg.phi);
   return {MPrev{arg.inter,
                 rec_layout.size(),
-                event_table(),
+                {},
                 {},
                 uniq(std::move(rec_state)),
                 true},
@@ -515,48 +515,53 @@ event_table_vec MState::MAndAssign::eval(const database &db,
 }
 
 event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
-  // fmt::print("on call, past_ts is: {}\n", past_ts);
   auto rec_tabs = state->eval(db, ts);
-  // fmt::print("rec_tabs is: {}\n", rec_tabs);
   past_ts.insert(past_ts.end(), ts.begin(), ts.end());
   if (rec_tabs.empty()) {
-    // fmt::print("on return 1, past_ts is: {}\n", past_ts);
     return rec_tabs;
   }
+  /*fmt::print("rec_tabs not empty, rec_tabs: {}, past_ts: {}, buf: {}\n",
+             rec_tabs, past_ts, buf);*/
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size() + 1);
   auto tabs_it = rec_tabs.begin();
   if (is_first) {
-    buf = std::move(*tabs_it);
-    tabs_it++;
     res_tabs.push_back(event_table(num_fvs));
     is_first = false;
   }
 
-  if (tabs_it == rec_tabs.end()) {
-    // fmt::print("on return 2, past_ts is: {}\n", past_ts);
-    return res_tabs;
+  if (past_ts.size() >= 2) {
+    if (buf) {
+      std::optional<event_table> taken_val;
+      buf.swap(taken_val);
+      if (inter.contains(past_ts[1] - past_ts[0])) {
+        res_tabs.push_back(std::move(*taken_val));
+      } else {
+        res_tabs.push_back(event_table(num_fvs));
+      }
+      past_ts.pop_front();
+    }
+    for (auto rec_tabs_end = rec_tabs.end();
+         past_ts.size() >= 2 && tabs_it != rec_tabs_end;
+         past_ts.pop_front(), ++tabs_it) {
+      if (inter.contains(past_ts[1] - past_ts[0]))
+        res_tabs.push_back(std::move(*tabs_it));
+      else
+        res_tabs.push_back(event_table(num_fvs));
+    }
   }
 
-  assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
-  // fmt::print("first if, interval diff is {}\n", past_ts[1] - past_ts[0]);
-  if (inter.contains(past_ts[1] - past_ts[0]))
-    res_tabs.push_back(std::move(buf));
-  else
-    res_tabs.push_back(event_table(num_fvs));
-  past_ts.pop_front();
-
-  for (; (tabs_it + 1) < rec_tabs.end(); past_ts.pop_front(), ++tabs_it) {
-    // fmt::print("interval diff is {}", past_ts[1] - past_ts[0]);
-    assert(past_ts.size() > 1 && past_ts[0] <= past_ts[1]);
-    if (inter.contains(past_ts[1] - past_ts[0]))
-      res_tabs.push_back(*tabs_it);
-    else
-      res_tabs.push_back(event_table(num_fvs));
+  if (tabs_it != rec_tabs.end()) {
+    /*fmt::print("print before assert res_tabs: {}, past_ts: {}, buf: {}\n", res_tabs,
+               past_ts, buf);*/
+    assert(!buf);
+    buf.emplace(std::move(*tabs_it));
+    tabs_it++;
   }
-  // fmt::print("returning\n");
-  buf = std::move(*tabs_it);
-  // fmt::print("on return 3, past_ts is: {}\n", past_ts);
+
+  assert(tabs_it == rec_tabs.end());
+  /*fmt::print("returning res_tabs: {}, past_ts: {}, buf: {}\n", res_tabs,
+             past_ts, buf);*/
   return res_tabs;
 }
 

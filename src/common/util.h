@@ -5,9 +5,11 @@
 #include <boost/hana.hpp>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <fmt/format.h>
 
 namespace detail {
 
@@ -68,6 +70,27 @@ auto make_vector(T &&e, Rest &&...rest) {
 }
 
 std::string read_file(const std::filesystem::path &path);
+
+template<typename T>
+struct [[maybe_unused]] fmt::formatter<std::optional<T>> {
+  constexpr auto parse [[maybe_unused]] (format_parse_context &ctx)
+  -> decltype(auto) {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it != '}')
+      throw format_error("invalid format - only empty format strings are "
+                         "accepted for event_data");
+    return it;
+  }
+
+  template<typename FormatContext>
+  auto format [[maybe_unused]] (const std::optional<T> &opt, FormatContext &ctx)
+  -> decltype(ctx.out()) {
+    if (opt)
+      return format_to(ctx.out(), "{}", *opt);
+    else
+      return format_to(ctx.out(), "Ø");
+  }
+};
 
 using detail::always_false_v;
 using detail::any_type_equal_v;

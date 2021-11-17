@@ -51,8 +51,9 @@ static fs::path working_dir() {
 void differential_test::gen_sig_formula(const fs::path &wdir) {
   const size_t MAX_ITERS = 200;
   for (size_t i = 0;; ++i) {
+    // size == 4, free_vars == 5
     if (bp::system(bp::start_dir(wdir), gen_fma_, "-output", "bla", "-size",
-                   "4", "-free_vars", "5", "-max_interval", "20",
+                   "1", "-free_vars", "1", "-max_interval", "20",
                    bp::std_out > bp::null,
                    bp::std_err > "gen_fma_stderr") != 0) {
       throw std::runtime_error("failed to generate signature/formula pair");

@@ -162,7 +162,7 @@ namespace detail {
     struct MPrev {
       Interval inter;
       size_t num_fvs;
-      event_table buf;
+      std::optional<event_table> buf;
       devector<size_t> past_ts;
       ptr_type<MState> state;
       bool is_first;
