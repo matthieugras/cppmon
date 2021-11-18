@@ -384,18 +384,20 @@ event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
   if (ty == TP_PRED) {
     event_table tab(nfvs);
     for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
-      match(make_vector(common::event_data::Int(curr_tp)), tab);
+      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp))),
+            tab);
     res_tabs.push_back(std::move(tab));
   } else if (ty == TS_PRED) {
     event_table tab(nfvs);
     for (size_t curr_ts : ts)
-      match(make_vector(common::event_data::Int(curr_ts)), tab);
+      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_ts))),
+            tab);
     res_tabs.push_back(std::move(tab));
   } else if (ty == TPTS_PRED) {
     event_table tab(nfvs);
     for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
-      match(make_vector(common::event_data::Int(curr_tp),
-                        common::event_data::Int(ts[i])),
+      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp)),
+                        common::event_data::Int(static_cast<int64_t>(ts[i]))),
             tab);
     res_tabs.push_back(std::move(tab));
   } else {
@@ -534,6 +536,7 @@ event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
     if (buf) {
       std::optional<event_table> taken_val;
       buf.swap(taken_val);
+      assert(past_ts[1] >= past_ts[0]);
       if (inter.contains(past_ts[1] - past_ts[0])) {
         res_tabs.push_back(std::move(*taken_val));
       } else {
@@ -544,6 +547,7 @@ event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
     for (auto rec_tabs_end = rec_tabs.end();
          past_ts.size() >= 2 && tabs_it != rec_tabs_end;
          past_ts.pop_front(), ++tabs_it) {
+      assert(past_ts[1] >= past_ts[0]);
       if (inter.contains(past_ts[1] - past_ts[0]))
         res_tabs.push_back(std::move(*tabs_it));
       else
@@ -552,8 +556,8 @@ event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
   }
 
   if (tabs_it != rec_tabs.end()) {
-    /*fmt::print("print before assert res_tabs: {}, past_ts: {}, buf: {}\n", res_tabs,
-               past_ts, buf);*/
+    /*fmt::print("print before assert res_tabs: {}, past_ts: {}, buf: {}\n",
+       res_tabs, past_ts, buf);*/
     assert(!buf);
     buf.emplace(std::move(*tabs_it));
     tabs_it++;

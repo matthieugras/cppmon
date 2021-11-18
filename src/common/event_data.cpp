@@ -66,7 +66,7 @@ event_data::~event_data() {
   }
 }
 
-event_data event_data::Int(int i) {
+event_data event_data::Int(int64_t i) {
   event_data tmp;
   tmp.tag = HOLDS_INT;
   tmp.i = i;
@@ -183,15 +183,15 @@ double event_data::to_double() const {
 
 event_data event_data::int_to_float() const {
   assert(tag == HOLDS_INT);
-  return Float(i);
+  return Float(static_cast<double>(i));
 }
 
 event_data event_data::float_to_int() const {
   assert(tag == HOLDS_FLOAT);
-  return Int(static_cast<int>(d));
+  return Int(static_cast<int64_t>(d));
 }
 
-const int *event_data::get_if_int() const {
+const int64_t *event_data::get_if_int() const {
   if (tag == HOLDS_INT)
     return &i;
   else
@@ -201,7 +201,7 @@ const int *event_data::get_if_int() const {
 event_data event_data::from_json(const json &json_formula) {
   string_view event_ty = json_formula.at(0).get<string_view>();
   if (event_ty == "EInt"sv) {
-    return Int(json_formula.at(1).get<int>());
+    return Int(json_formula.at(1).get<int64_t>());
   } else if (event_ty == "EFloat"sv) {
     return Float(json_formula.at(1).get<double>());
   } else if (event_ty == "EString"sv) {

@@ -25,7 +25,7 @@ std::string deserializer::read_string() {
 common::event_data deserializer::read_event_data() {
   auto ev_ty = read_primitive<c_ev_ty>();
   if (ev_ty == TY_INT)
-    return common::event_data::Int(read_primitive<int>());
+    return common::event_data::Int(read_primitive<int64_t>());
   else if (ev_ty == TY_FLOAT)
     return common::event_data::Float(read_primitive<double>());
   else if (ev_ty == TY_STRING)

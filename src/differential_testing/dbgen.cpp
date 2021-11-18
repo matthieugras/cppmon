@@ -38,7 +38,7 @@ using parse::database_elem;
 using parse::signature;
 using parse::signature_parser;
 using parse::timestamped_database;
-using simple_tab = std::vector<std::vector<int>>;
+using simple_tab = std::vector<std::vector<int64_t>>;
 }// namespace
 
 template<typename S>
@@ -133,7 +133,7 @@ dbgen::sub_form_info dbgen::validate_formula_impl(const Formula &formula,
 }
 
 void dbgen::update_or_insert(database &db, const std::string &pred_name,
-                             const std::vector<int> &pred_args) {
+                             const std::vector<int64_t> &pred_args) {
   auto it = db.find(pred_name);
   std::vector<event_data> ev_dat;
   ev_dat.reserve(pred_args.size());
@@ -148,10 +148,10 @@ void dbgen::update_or_insert(database &db, const std::string &pred_name,
   }
 }
 dbgen::simple_tab dbgen::prepend_col(const simple_tab &tab,
-                                     const std::vector<int> &col_vals) {
+                                     const std::vector<int64_t> &col_vals) {
   simple_tab res_tab;
   for (const auto &row : tab) {
-    std::vector<int> new_row(row.size() + 1);
+    std::vector<int64_t> new_row(row.size() + 1);
     new_row[0] = col_vals[0];
     for (size_t i = 1; i < row.size() + 1; ++i)
       new_row[i] = row[i - 1];
@@ -169,10 +169,10 @@ simple_tab dbgen::tab_union(const simple_tab &tab1, const simple_tab &tab2) {
 }
 
 simple_tab dbgen::random_tab(size_t n_cols, size_t n_rows) {
-  simple_tab res_tab(n_rows, std::vector<int>(n_cols));
+  simple_tab res_tab(n_rows, std::vector<int64_t>(n_cols));
   for (size_t i = 0; i < n_rows; ++i) {
     for (size_t j = 0; j < n_cols; ++j) {
-      curr_var_name += absl::Uniform<int>(bitgen, 1, 5);
+      curr_var_name += absl::Uniform<int64_t>(bitgen, 1, 5);
       res_tab[i][j] = curr_var_name;
     }
   }
@@ -254,7 +254,7 @@ dbgen::ts_db_list dbgen::gen_db_impl(const Formula &formula, simple_tab pos,
         return {};
       database res_db;
       for (const auto &row : pos) {
-        std::vector<int> assignment;
+        std::vector<int64_t> assignment;
         assignment.reserve(arg.pred_args.size());
         for (const auto &pred_arg : arg.pred_args) {
           if (const auto *const var = pred_arg.get_if_var()) {

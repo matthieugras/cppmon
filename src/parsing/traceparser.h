@@ -201,7 +201,7 @@ private:
                     fmt::format("expected float or int, got string"));
 #endif
                 if (ty == INT_TYPE) {
-                  int res{};
+                  int64_t res{};
                   const auto *fst = ptr->data(), *lst = fst + ptr->size();
                   auto [new_ptr, ec] = std::from_chars(fst, lst, res);
 #ifndef NDEBUG

@@ -2,6 +2,8 @@
 #define CPPMON_CPPMON_EVENT_SOURCE_EXPORT_H
 
 #include <stddef.h>
+#include <stdint.h>
+
 
 /*!
  * @file cppmon_event_source_export.h
@@ -24,7 +26,7 @@ typedef enum
  * @warning The type with the name Float is actually a double
  */
 typedef union {
-  int i;
+  int64_t i;
   double d;
   char *s;
 } c_ev_data;

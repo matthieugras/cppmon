@@ -53,7 +53,7 @@ void differential_test::gen_sig_formula(const fs::path &wdir) {
   for (size_t i = 0;; ++i) {
     // size == 4, free_vars == 5
     if (bp::system(bp::start_dir(wdir), gen_fma_, "-output", "bla", "-size",
-                   "1", "-free_vars", "1", "-max_interval", "20",
+                   "4", "-free_vars", "5", "-max_interval", "20",
                    bp::std_out > bp::null,
                    bp::std_err > "gen_fma_stderr") != 0) {
       throw std::runtime_error("failed to generate signature/formula pair");
@@ -76,8 +76,10 @@ void differential_test::gen_sig_formula(const fs::path &wdir) {
 }
 
 void differential_test::gen_trace(const fs::path &wdir) {
+  std::string seed =
+    std::to_string(absl::Uniform<size_t>(bitgen_, 0UL, 100000000UL));
   if (bp::system(bp::start_dir(wdir), trace_gen_, "60", "-e", "20", "-i", "2",
-                 "-sig", "bla.sig", "-dom", "20",
+                 "-sig", "bla.sig", "-dom", "20", "-seed", seed,
                  bp::std_out > (wdir / "raw_trace"),
                  bp::std_err > (wdir / "trace_gen_stderr")) != 0)
     throw std::runtime_error("failed to generate trace");
@@ -131,7 +133,7 @@ void differential_test::run_single_test(size_t iter_num, fs::path wdir) {
 void differential_test::run_tests() {
   boost::asio::thread_pool pool(13);
   free_slots_ = std::make_unique<std::counting_semaphore<>>(30);
-  for (size_t iter_num = 0; iter_num < 100000; ++iter_num) {
+  for (size_t iter_num = 0; iter_num < 400000; ++iter_num) {
     if (iter_num % 1000 == 0)
       fmt::print("iteration {}\n", iter_num);
     free_slots_->acquire();

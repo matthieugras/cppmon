@@ -2,6 +2,7 @@
 #define CPPMON_C_EVENT_TYPES_H
 
 extern "C" {
+#include <stdint.h>
 typedef enum
 {
   TY_INT,
@@ -10,7 +11,7 @@ typedef enum
 } c_ev_ty;
 
 typedef union {
-  int i;
+  int64_t i;
   double d;
   char *s;
 } c_ev_data;

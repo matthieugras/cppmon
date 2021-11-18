@@ -4,6 +4,7 @@
 #include <atomic>
 #include <boost/filesystem.hpp>
 #include <semaphore>
+#include <absl/random/random.h>
 
 namespace testing {
 class differential_test {
@@ -22,6 +23,7 @@ private:
   bool run_monitors(const boost::filesystem::path &wdir);
   boost::filesystem::path cppmon_, monpoly_, gen_fma_, trace_gen_, replayer_;
   std::unique_ptr<std::counting_semaphore<>> free_slots_;
+  absl::BitGen bitgen_;
 };
 }// namespace testing
 

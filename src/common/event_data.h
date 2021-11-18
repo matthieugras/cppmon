@@ -29,7 +29,7 @@ public:
   event_data(event_data &&other) noexcept;
   ~event_data();
 
-  static event_data Int(int i);
+  static event_data Int(int64_t i);
   static event_data Float(double d);
   static event_data String(const std::string &s);
   static event_data String(std::string &&s);
@@ -49,7 +49,7 @@ public:
   event_data operator%(const event_data &other) const;
   [[nodiscard]] event_data int_to_float() const;
   [[nodiscard]] event_data float_to_int() const;
-  [[nodiscard]] const int *get_if_int() const;
+  [[nodiscard]] const int64_t *get_if_int() const;
 
   template<typename H>
   friend H AbslHashValue(H h, const event_data &elem) {
@@ -87,7 +87,7 @@ private:
     HOLD_STRING
   } tag;
   union {
-    int i;
+    int64_t i;
     double d;
     std::string *s;
   };

@@ -101,7 +101,7 @@ public:
   void add_event(const common::event_data &) { counter_++; }
 
   common::event_data finalize_group() const {
-    return common::event_data::Int(static_cast<int>(counter_));
+    return common::event_data::Int(static_cast<int64_t>(counter_));
   }
 
 protected:

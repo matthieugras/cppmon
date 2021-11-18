@@ -6,7 +6,7 @@
 
 class dbgen {
 public:
-  using simple_tab = std::vector<std::vector<int>>;
+  using simple_tab = std::vector<std::vector<int64_t>>;
   using ts_db_list = absl::flat_hash_map<size_t, parse::database>;
   static void merge_ts_db_list(ts_db_list &ts_dbs1, ts_db_list &ts_dbs2);
   ts_db_list generate_database(const fo::Formula &formula, size_t num_tups,
@@ -25,10 +25,10 @@ private:
                                       const fo::fv_set &all_fvs);
 
   void update_or_insert(parse::database &db, const std::string &pred_name,
-                        const std::vector<int> &pred_args);
+                        const std::vector<int64_t> &pred_args);
 
   simple_tab prepend_col(const simple_tab &tab,
-                         const std::vector<int> &col_vals);
+                         const std::vector<int64_t> &col_vals);
 
   simple_tab tab_union(const simple_tab &tab1, const simple_tab &tab2);
 
