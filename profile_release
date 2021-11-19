@@ -6,7 +6,7 @@ arch_build=x86_64
 compiler=clang
 compiler.version=13
 compiler.libcxx=libstdc++11
-compiler.cppstd=gnu17
+compiler.cppstd=20
 #build_type=RelWithDebInfo
 build_type=Release
 [options]
@@ -14,5 +14,5 @@ build_type=Release
 [env]
 CC=clang
 CXX=clang++
-CFLAGS="-flto -march=native"
-CXXFLAGS="-flto -march=native"
+CFLAGS="-flto -march=native -g"
+CXXFLAGS="-flto -march=native -g"
