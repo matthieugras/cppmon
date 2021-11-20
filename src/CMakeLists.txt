@@ -30,9 +30,6 @@ target_link_libraries(formula
 
 # Monitor
 add_library(monitor STATIC
-    file_monitor_driver.cpp
-    uds_monitor_driver.cpp
-    monitor_driver.cpp
     monitor.cpp
     aggregation_impl.cpp
     temporal_aggregation_impl.cpp
@@ -51,7 +48,11 @@ target_link_libraries(monitor
     socket_deserialization)
 
 # Main executable
-add_executable(cppmon cppmon.cpp)
+add_executable(cppmon
+    cppmon.cpp
+    file_monitor_driver.cpp
+    uds_monitor_driver.cpp
+    monitor_driver.cpp)
 target_include_directories(cppmon PUBLIC
     ${MAIN_INCLUDES})
 
