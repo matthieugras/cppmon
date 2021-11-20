@@ -107,7 +107,8 @@ protected:
 
   template<typename... Args>
   shared_base(size_t nfvs, fo::Interval inter, Args &&...args)
-      : AggBase(std::forward<Args>(args)...), nfvs(nfvs), inter(inter) {}
+      : AggBase(std::forward<Args>(args)...), nfvs(nfvs), inter(inter),
+        interval_inf(!inter.is_bounded()) {}
 
   void drop_tuple_from_all_data(const event &e) {
     auto all_dat_it = all_data_counted.find(e);
@@ -140,7 +141,8 @@ protected:
   }
 
   void add_new_ts(size_t ts) {
-    drop_too_old(ts);
+    if (!interval_inf)
+      drop_too_old(ts);
     for (; !data_prev.empty(); data_prev.pop_front()) {
       auto &latest = data_prev.front();
       size_t old_ts = latest.first;
@@ -152,21 +154,26 @@ protected:
         if (since_it != tuple_since.end() && since_it->second <= old_ts)
           this->tuple_in_update(e, old_ts);
       }
-      assert(data_in.empty() || old_ts >= data_in.back().first);
-      data_in.push_back(std::move(latest));
+      if (!interval_inf) {
+        assert(data_in.empty() || old_ts >= data_in.back().first);
+        data_in.push_back(std::move(latest));
+      }
     }
   }
 
   void add_new_table(event_table &&tab_r, size_t ts) {
     for (const auto &e : tab_r) {
       tuple_since.try_emplace(e, ts);
-      all_data_counted[e]++;
+      if (!interval_inf)
+        all_data_counted[e]++;
     }
     if (inter.contains(0)) {
       for (const auto &e : tab_r)
         this->tuple_in_update(e, ts);
-      assert(data_in.empty() || ts >= data_in.back().first);
-      data_in.emplace_back(ts, std::move(tab_r));
+      if (!interval_inf) {
+        assert(data_in.empty() || ts >= data_in.back().first);
+        data_in.emplace_back(ts, std::move(tab_r));
+      }
     } else {
       assert(data_prev.empty() || ts >= data_prev.back().first);
       data_prev.emplace_back(ts, std::move(tab_r));
@@ -175,6 +182,7 @@ protected:
 
   size_t nfvs;
   fo::Interval inter;
+  bool interval_inf;
   table_buf data_prev, data_in;
   tuple_buf tuple_in, tuple_since, all_data_counted;
 };
