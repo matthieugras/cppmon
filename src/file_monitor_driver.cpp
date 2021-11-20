@@ -1,9 +1,18 @@
+#include <config.h>
 #include <database.h>
 #include <file_monitor_driver.h>
 #include <monitor.h>
 #include <string>
 #include <traceparser.h>
 #include <util.h>
+
+#ifdef USE_JEMALLOC
+#include <absl/flags/flag.h>
+extern "C" {
+ABSL_FLAG(bool, dump_heap, false, "create a heap dump before terminating");
+#include <jemalloc/jemalloc.h>
+}
+#endif
 
 file_monitor_driver::file_monitor_driver(
   const std::filesystem::path &formula_path,
@@ -37,6 +46,10 @@ void file_monitor_driver::do_monitor() {
                               make_vector(ts));
     print_satisfactions(sats);
   }
+#ifdef USE_JEMALLOC
+  if (absl::GetFlag(FLAGS_dump_heap))
+    mallctl("prof.dump", NULL, NULL, NULL, 0);
+#endif
   auto sats_last = monitor_.last_step();
   print_satisfactions(sats_last);
 }

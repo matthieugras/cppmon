@@ -3,7 +3,9 @@ add_subdirectory(parsing)
 add_subdirectory(differential_testing)
 add_subdirectory(socket_interface)
 
-set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
+set(MAIN_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+configure_file(config.h.in config.h @ONLY)
+
 
 # Table
 add_library(table STATIC table.cpp)
