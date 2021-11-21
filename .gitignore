@@ -1,5 +1,6 @@
 builddir
 builddir_debug
+build
 .idea
 cmake-build-debug
 
