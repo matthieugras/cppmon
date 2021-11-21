@@ -35,15 +35,15 @@ file_monitor_driver::file_monitor_driver(
   monitor_ = std::move(tmp_mon);
 }
 
-file_monitor_driver::~file_monitor_driver() noexcept {}
+file_monitor_driver::~file_monitor_driver() noexcept = default;
 
 void file_monitor_driver::do_monitor() {
   using parse::timestamped_database;
   std::string db_str;
   while (std::getline(log_, db_str)) {
     auto [ts, db] = parser_.parse_database(db_str);
-    auto sats = monitor_.step(monitor::monitor_db_from_parser_db(std::move(db)),
-                              make_vector(ts));
+    auto mon_db = monitor::monitor_db_from_parser_db(std::move(db));
+    auto sats = monitor_.step(mon_db, make_vector(ts));
     print_satisfactions(sats);
   }
 #ifdef USE_JEMALLOC

@@ -19,7 +19,7 @@ monitor::monitor(const Formula &formula) : curr_tp_(0) {
     find_permutation(id_permutation(layout_tmp.size()), layout_tmp);
 }
 
-satisfactions monitor::step(const database &db, const ts_list &ts) {
+satisfactions monitor::step(database &db, const ts_list &ts) {
   for (size_t t : ts) {
     tp_ts_map_.emplace(max_tp_, t);
     max_tp_++;
@@ -42,13 +42,14 @@ satisfactions monitor::step(const database &db, const ts_list &ts) {
 }
 
 satisfactions monitor::last_step() {
-  return step({}, make_vector(static_cast<size_t>(MAXIMUM_TIMESTAMP)));
+  database db;
+  return step(db, make_vector(static_cast<size_t>(MAXIMUM_TIMESTAMP)));
 }
 
 // MState methods
 MState::MState(val_type &&state) : state(std::move(state)) {}
 
-event_table_vec MState::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::eval(database &db, const ts_list &ts) {
   auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MExists, MRel, MAndRel,
@@ -377,7 +378,7 @@ void MState::MPred::match(const vector<event_data> &event_args,
   acc_tab.add_row(std::move(res));
 }
 
-event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MPred::eval(database &db, const ts_list &ts) {
   size_t num_tps = ts.size();
   event_table_vec res_tabs;
   res_tabs.reserve(num_tps);
@@ -415,7 +416,7 @@ event_table_vec MState::MPred::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MRel::eval(const database &, const ts_list &ts) {
+event_table_vec MState::MRel::eval(database &, const ts_list &ts) {
   size_t num_tabs = ts.size();
   event_table_vec res_tabs;
   res_tabs.reserve(ts.size());
@@ -424,7 +425,7 @@ event_table_vec MState::MRel::eval(const database &, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MNeg::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MNeg::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
@@ -438,7 +439,7 @@ event_table_vec MState::MNeg::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MExists::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MExists::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   if (drop_idx)
     std::for_each(rec_tabs.begin(), rec_tabs.end(),
@@ -446,7 +447,7 @@ event_table_vec MState::MExists::eval(const database &db, const ts_list &ts) {
   return rec_tabs;
 }
 
-event_table_vec MState::MOr::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MOr::eval(database &db, const ts_list &ts) {
   auto reduction_fn = [this](const event_table &tab1, const event_table &tab2) {
     return tab1.t_union(tab2, r_layout_permutation);
   };
@@ -454,7 +455,7 @@ event_table_vec MState::MOr::eval(const database &db, const ts_list &ts) {
                                        db, ts);
 }
 
-event_table_vec MState::MAnd::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
   auto reduction_fn = [this](const event_table &tab1,
                              const event_table &tab2) -> event_table {
     if (const auto *anti_join_ptr = var2::get_if<anti_join_info>(&op_info)) {
@@ -470,7 +471,7 @@ event_table_vec MState::MAnd::eval(const database &db, const ts_list &ts) {
   return ret;
 }
 
-event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MAndRel::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
@@ -495,8 +496,7 @@ event_table_vec MState::MAndRel::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MAndAssign::eval(const database &db,
-                                         const ts_list &ts) {
+event_table_vec MState::MAndAssign::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   // fmt::print("MAndAssign::eval rec_tabs: {}\n", rec_tabs);
   event_table_vec res_tabs;
@@ -516,7 +516,7 @@ event_table_vec MState::MAndAssign::eval(const database &db,
   return res_tabs;
 }
 
-event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   past_ts.insert(past_ts.end(), ts.begin(), ts.end());
   if (rec_tabs.empty()) {
@@ -569,7 +569,7 @@ event_table_vec MState::MPrev::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MNext::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MNext::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   past_ts.insert(past_ts.end(), ts.begin(), ts.end());
   if (rec_tabs.empty())
@@ -592,7 +592,7 @@ event_table_vec MState::MNext::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MUntil::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MUntil::eval(database &db, const ts_list &ts) {
   ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
   auto reduction_fn = [this](event_table &tab_l,
                              event_table &tab_r) -> event_table_vec {
@@ -608,8 +608,7 @@ event_table_vec MState::MUntil::eval(const database &db, const ts_list &ts) {
   return ret;
 }
 
-event_table_vec MState::MEventually::eval(const database &db,
-                                          const ts_list &ts) {
+event_table_vec MState::MEventually::eval(database &db, const ts_list &ts) {
   ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
   auto rec_tabs = r_state->eval(db, ts);
   event_table_vec res_tabs;
@@ -628,7 +627,7 @@ event_table_vec MState::MEventually::eval(const database &db,
   return res_tabs;
 }
 
-event_table_vec MState::MAgg::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MAgg::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
@@ -637,13 +636,18 @@ event_table_vec MState::MAgg::eval(const database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MLet::eval(const database &db, const ts_list &ts) {
+event_table_vec MState::MLet::eval(database &db, const ts_list &ts) {
   auto l_tabs = phi_state->eval(db, ts);
 
   // TODO: maybe it is better not to do a hard fork and rollback changes instead
-  auto db_cp = db;
-  auto &db_ent = db_cp[db_idx];
-  db_ent.clear();
+  std::optional<database::mapped_type> old_db_ent;
+  auto matching_idx = db.find(db_idx);
+  if (matching_idx != db.end()) {
+    old_db_ent.emplace(std::move(matching_idx->second));
+    db.erase(matching_idx);
+  }
+
+  database::mapped_type db_ent;
   const size_t n_l_tabs = l_tabs.size();
   db_ent.reserve(n_l_tabs);
   for (const auto &l_tab : l_tabs) {
@@ -653,7 +657,12 @@ event_table_vec MState::MLet::eval(const database &db, const ts_list &ts) {
       new_tab.push_back(filter_row(projection_mask, e));
     db_ent.push_back(std::move(new_tab));
   }
-  return psi_state->eval(db_cp, ts);
+  auto new_it = db.emplace(db_idx, std::move(db_ent)).first;
+  auto res = psi_state->eval(db, ts);
+  db.erase(new_it);
+  if (old_db_ent)
+    db.emplace(db_idx, std::move(old_db_ent.value()));
+  return res;
 }
 
 }// namespace monitor::detail
