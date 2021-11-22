@@ -26,22 +26,21 @@ TEST(MState, Bla) {
     Formula::Since(Interval(2, 4), Formula::Pred("P", {Term::Var(0)}),
                    Formula::Pred("Q", {Term::Var(0)}));
   auto mon = monitor::monitor(formula);
-  auto res1 = mon.step(
-    monitor_db_from_parser_db(
-      {{"Q", {{ed::String("a")}, {ed::String("b")}, {ed::String("c")}}}}),
-    make_vector(1UL));
+  auto db1 = monitor_db_from_parser_db(
+    {{"Q", {{ed::String("a")}, {ed::String("b")}, {ed::String("c")}}}});
+  auto res1 = mon.step(db1, make_vector(1UL));
   fmt::print("RESULT IS: {}\n", res1);
-  auto res2 = mon.step(
-    monitor_db_from_parser_db({{"P", {{ed::String("b")}, {ed::String("c")}}}}),
-    make_vector(2UL));
+  auto db2 =
+    monitor_db_from_parser_db({{"P", {{ed::String("b")}, {ed::String("c")}}}});
+  auto res2 = mon.step(db2, make_vector(2UL));
   fmt::print("RESULT IS: {}\n", res2);
-  auto res3 = mon.step(
+  auto db3 =
     monitor_db_from_parser_db({{"P", {{ed::String("b")}, {ed::String("c")}}},
-                               {"Q", {{ed::String("a")}, {ed::String("b")}}}}),
-    make_vector(3UL));
+                               {"Q", {{ed::String("a")}, {ed::String("b")}}}});
+  auto res3 = mon.step(db3, make_vector(3UL));
   fmt::print("RESULT IS: {}\n", res3);
-  auto res4 = mon.step(monitor_db_from_parser_db({{"P", {{ed::String("a")}}}}),
-                       make_vector(7UL));
+  auto db4 = monitor_db_from_parser_db({{"P", {{ed::String("a")}}}});
+  auto res4 = mon.step(db4, make_vector(7UL));
   fmt::print("RESULT IS: {}\n", res4);
 }
 
