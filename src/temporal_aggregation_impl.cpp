@@ -64,7 +64,7 @@ void temporal_aggregation_impl::remove_result(const event &e) {
     state_);
 }
 
-event_table temporal_aggregation_impl::finalize_table() {
+opt_table temporal_aggregation_impl::finalize_table() {
   return boost::variant2::visit(
     [this](auto &&arg) { return arg.finalize_table(nfvs_, false); }, state_);
 }

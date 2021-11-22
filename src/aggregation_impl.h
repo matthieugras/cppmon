@@ -14,7 +14,7 @@ namespace monitor::detail::agg_base {
 template<typename GroupType>
 class grouped_state {
 public:
-  grouped_state() {}
+  grouped_state() = default;
 
   void add_result(const event &group, const common::event_data &val) {
     auto it = groups_.template find(group);
@@ -25,7 +25,7 @@ public:
     }
   }
 
-  event_table finalize_table(size_t nfvs, bool clear_groups = true) {
+  opt_table finalize_table(size_t nfvs, bool clear_groups = true) {
     event_table res(nfvs);
     for (auto &[group, group_state] : groups_) {
       auto result_value = group_state.finalize_group();
@@ -37,7 +37,7 @@ public:
     }
     if (clear_groups)
       groups_.clear();
-    return res;
+    return res.empty() ? opt_table() : std::move(res);
   }
 
 protected:
@@ -138,7 +138,7 @@ public:
   aggregation_impl(const table_layout &phi_layout, const fo::Term &agg_term,
                    common::event_data default_val, fo::agg_type ty,
                    size_t res_var, size_t num_bound_vars);
-  event_table eval(event_table &tab);
+  opt_table eval(opt_table &tab);
   table_layout get_layout() const;
 
 private:

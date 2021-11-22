@@ -48,20 +48,24 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
     throw std::runtime_error("unsupported operation");
 }
 
-event_table aggregation_impl::eval(event_table &tab) {
-  if (tab.empty() && all_bound_)
+opt_table aggregation_impl::eval(opt_table &tab) {
+  if (!tab && all_bound_)
     return event_table::singleton_table(default_val_);
-  for (const auto &e : tab) {
-    auto group = filter_row(group_var_idxs_, e);
-    auto trm_var_val = e[term_var_idx_];
-    boost::variant2::visit(
-      [&group, &trm_var_val](auto &&arg) {
-        // fmt::print("group is: {}, trm_var_val is: {}\n", group, trm_var_val);
-        arg.add_result(group, trm_var_val);
-      },
-      state_);
+  if (tab) {
+    assert(!tab->empty());
+    for (const auto &e : *tab) {
+      auto group = filter_row(group_var_idxs_, e);
+      auto trm_var_val = e[term_var_idx_];
+      boost::variant2::visit(
+        [&group, &trm_var_val](auto &&arg) {
+          // fmt::print("group is: {}, trm_var_val is: {}\n", group,
+          // trm_var_val);
+          arg.add_result(group, trm_var_val);
+        },
+        state_);
+    }
   }
-  event_table res_tab = boost::variant2::visit(
+  auto res_tab = boost::variant2::visit(
     [this](auto &&arg) { return arg.finalize_table(nfvs_); }, state_);
   return res_tab;
 }

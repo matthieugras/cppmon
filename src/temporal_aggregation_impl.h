@@ -84,8 +84,8 @@ private:
   absl::btree_multiset<common::event_data, Compare> group_state_;
 };
 
-using max_group = min_max_group<std::greater<common::event_data>>;
-using min_group = min_max_group<std::less<common::event_data>>;
+using max_group = min_max_group<std::greater<>>;
+using min_group = min_max_group<std::less<>>;
 
 class count_group : public agg_base::count_group {
 public:
@@ -126,7 +126,7 @@ public:
                             size_t res_var, size_t num_bound_vars);
   void add_result(const event &e);
   void remove_result(const event &e);
-  event_table finalize_table();
+  opt_table finalize_table();
   table_layout get_layout() const;
 
 private:

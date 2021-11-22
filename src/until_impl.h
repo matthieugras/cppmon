@@ -23,7 +23,7 @@ protected:
   using ts_buf_t = boost::container::devector<size_t>;
 
   until_impl_base(size_t nfvs, fo::Interval inter);
-  event_table table_from_map(const a2_elem_t &mapping);
+  opt_table table_from_map(const a2_elem_t &mapping);
   void combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2);
   void update_a2_inner_map(size_t idx, const event &e, size_t new_ts_tp);
   void shift(size_t new_ts);
@@ -41,14 +41,14 @@ class until_impl : public until_impl_base {
 public:
   until_impl(bool left_negated, size_t nfvs, std::vector<size_t> comm_idx_r,
              fo::Interval inter);
-  void add_tables(event_table &tab_l, event_table &tab_r, size_t new_ts);
+  void add_tables(opt_table &tab_l, opt_table &tab_r, size_t new_ts);
   void print_state();
 
 private:
   using a1_map_t = absl::flat_hash_map<tuple_t, size_t>;
 
-  void update_a2_map(size_t new_ts, const event_table &tab_r);
-  void update_a1_map(const event_table &tab_l);
+  void update_a2_map(size_t new_ts, const opt_table &tab_r);
+  void update_a1_map(const opt_table &tab_l);
 
   bool left_negated;
   std::vector<size_t> comm_idx_r;
@@ -59,10 +59,10 @@ private:
 class eventually_impl : public until_impl_base {
 public:
   eventually_impl(size_t nfvs, fo::Interval inter);
-  void add_right_table(event_table &tab_r, size_t new_ts);
+  void add_right_table(opt_table &tab_r, size_t new_ts);
 
 private:
-  void update_a2_map(size_t new_ts, const event_table &tab_r);
+  void update_a2_map(size_t new_ts, const opt_table &tab_r);
 };
 }// namespace monitor::detail
 

@@ -15,11 +15,11 @@ event_table_vec until_impl_base::eval(size_t new_ts) {
   return ret;
 }
 
-event_table until_impl_base::table_from_map(const a2_elem_t &mapping) {
+opt_table until_impl_base::table_from_map(const a2_elem_t &mapping) {
   event_table res_tab(nfvs);
   for (const auto &entry : mapping)
     res_tab.add_row(entry.first);
-  return res_tab;
+  return res_tab.empty() ? opt_table() : std::move(res_tab);
 }
 
 void until_impl_base::combine_max(a2_elem_t &mapping1, a2_elem_t &mapping2) {
@@ -82,55 +82,61 @@ void until_impl::print_state() {
              curr_tp, ts_buf, a1_map, a2_map, res_acc);
 }
 
-void until_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
+void until_impl::update_a2_map(size_t new_ts, const opt_table &tab_r) {
   size_t new_ts_tp;
   if (contains_zero)
     new_ts_tp = curr_tp;
   else
     new_ts_tp = new_ts - std::min((inter.get_lower() - 1), new_ts);
   assert(curr_tp >= ts_buf.size());
-  for (auto e_it = tab_r.cbegin(); e_it != tab_r.cend(); e_it++) {
-    if (contains_zero) {
-      assert(a2_map.size() > 0);
-      update_a2_inner_map(a2_map.size() - 1, *e_it, new_ts_tp);
+  if (tab_r) {
+    for (const auto &e: *tab_r) {
+      if (contains_zero) {
+        assert(!a2_map.empty());
+        update_a2_inner_map(a2_map.size() - 1, e, new_ts_tp);
+      }
+      const auto a1_it = a1_map.find(filter_row(comm_idx_r, e));
+      size_t override_idx;
+      if (a1_it == a1_map.end()) {
+        if (left_negated)
+          override_idx = 0;
+        else
+          continue;
+      } else {
+        if (left_negated)
+          override_idx =
+            a1_it->second + 1 <= first_tp ? 0 : a1_it->second + 1 - first_tp;
+        else
+          override_idx = a1_it->second <= first_tp ? 0 : a1_it->second - first_tp;
+      }
+      update_a2_inner_map(override_idx, e, new_ts_tp);
     }
-    const auto a1_it = a1_map.find(filter_row(comm_idx_r, *e_it));
-    size_t override_idx;
-    if (a1_it == a1_map.end()) {
-      if (left_negated)
-        override_idx = 0;
-      else
-        continue;
-    } else {
-      if (left_negated)
-        override_idx =
-          a1_it->second + 1 <= first_tp ? 0 : a1_it->second + 1 - first_tp;
-      else
-        override_idx = a1_it->second <= first_tp ? 0 : a1_it->second - first_tp;
-    }
-    update_a2_inner_map(override_idx, *e_it, new_ts_tp);
   }
   a2_map.emplace_back();
 }
 
-void until_impl::update_a1_map(const event_table &tab_l) {
+void until_impl::update_a1_map(const opt_table &tab_l) {
   if (!left_negated) {
-    auto erase_cond = [&tab_l](const auto &entry) {
-      return !tab_l.contains(entry.first);
-    };
-    absl::erase_if(a1_map, erase_cond);
-    for (const auto &e : tab_l) {
-      if (a1_map.contains(e))
-        continue;
-      a1_map.emplace(e, curr_tp);
+    if (tab_l) {
+      auto erase_cond = [&tab_l](const auto &entry) {
+        return !tab_l->contains(entry.first);
+      };
+      absl::erase_if(a1_map, erase_cond);
+      for (const auto &e : *tab_l) {
+        if (a1_map.contains(e))
+          continue;
+        a1_map.emplace(e, curr_tp);
+      }
+    } else {
+      a1_map.clear();
     }
-  } else {
-    for (const auto &e : tab_l)
+  } else if (tab_l) {
+    for (const auto &e : *tab_l)
       a1_map.insert_or_assign(e, curr_tp);
   }
 }
 
-void until_impl::add_tables(event_table &tab_l, event_table &tab_r,
+void until_impl::add_tables(opt_table &tab_l, opt_table &tab_r,
                             size_t new_ts) {
   assert(ts_buf.empty() || new_ts >= ts_buf.back());
   shift(new_ts);
@@ -143,23 +149,25 @@ void until_impl::add_tables(event_table &tab_l, event_table &tab_r,
 eventually_impl::eventually_impl(size_t nfvs, fo::Interval inter)
     : until_impl_base(nfvs, inter) {}
 
-void eventually_impl::update_a2_map(size_t new_ts, const event_table &tab_r) {
+void eventually_impl::update_a2_map(size_t new_ts, const opt_table &tab_r) {
   size_t new_ts_tp;
   if (contains_zero)
     new_ts_tp = curr_tp;
   else
     new_ts_tp = new_ts - std::min((inter.get_lower() - 1), new_ts);
   assert(curr_tp >= ts_buf.size());
-  for (auto e_it = tab_r.cbegin(); e_it != tab_r.cend(); e_it++) {
-    assert(a2_map.size() > 0);
-    if (contains_zero)
-      update_a2_inner_map(a2_map.size() - 1, *e_it, new_ts_tp);
-    update_a2_inner_map(0, *e_it, new_ts_tp);
+  if (tab_r) {
+    for (const auto &e: *tab_r) {
+      assert(!a2_map.empty());
+      if (contains_zero)
+        update_a2_inner_map(a2_map.size() - 1, e, new_ts_tp);
+      update_a2_inner_map(0, e, new_ts_tp);
+    }
   }
   a2_map.emplace_back();
 }
 
-void eventually_impl::add_right_table(event_table &tab_r, size_t new_ts) {
+void eventually_impl::add_right_table(opt_table &tab_r, size_t new_ts) {
   assert(ts_buf.empty() || new_ts >= ts_buf.back());
   shift(new_ts);
   update_a2_map(new_ts, tab_r);

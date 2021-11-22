@@ -144,6 +144,7 @@ namespace detail {
     struct MOr {
       ptr_type<MState> l_state, r_state;
       vector<size_t> r_layout_permutation;
+      size_t nfvs_l;
       binary_buffer buf;
       event_table_vec eval(database &db, const ts_list &ts);
     };
@@ -162,7 +163,7 @@ namespace detail {
     struct MPrev {
       Interval inter;
       size_t num_fvs;
-      std::optional<event_table> buf;
+      std::optional<opt_table> buf;
       devector<size_t> past_ts;
       ptr_type<MState> state;
       bool is_first;
@@ -187,8 +188,8 @@ namespace detail {
 
       event_table_vec eval(database &db, const ts_list &ts) {
         ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
-        auto reduction_fn = [this](event_table &tab_l,
-                                   event_table &tab_r) -> event_table {
+        auto reduction_fn = [this](opt_table &tab_l,
+                                   opt_table  &tab_r) -> opt_table  {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();

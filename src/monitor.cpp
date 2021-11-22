@@ -30,7 +30,8 @@ satisfactions monitor::step(database &db, const ts_list &ts) {
   size_t new_curr_tp = curr_tp_;
   size_t n = sats.size();
   for (size_t i = 0; i < n; ++i, ++new_curr_tp) {
-    auto output_tab = sats[i].make_verdicts(output_var_permutation_);
+    auto output_tab = sats[i] ? sats[i]->make_verdicts(output_var_permutation_)
+                              : vector<vector<common::event_data>>();
     auto it = tp_ts_map_.find(new_curr_tp);
     if (it->second < MAXIMUM_TIMESTAMP)
       transformed_sats.emplace_back(it->second, new_curr_tp,
@@ -103,7 +104,7 @@ MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
 
 static vector<size_t> get_sparse_var_2_idx(const table_layout &lay) {
   size_t res_size =
-    lay.size() == 0 ? 0 : (*std::max_element(lay.cbegin(), lay.cend()) + 1);
+    lay.empty() ? 0 : (*std::max_element(lay.cbegin(), lay.cend()) + 1);
   vector<size_t> var_2_idx(res_size);
   for (size_t i = 0; i < lay.size(); ++i)
     var_2_idx[lay[i]] = i;
@@ -303,7 +304,7 @@ MState::init_pair MState::init_let_state(const fo::Formula::let_t &arg) {
   auto proj_mask =
     find_permutation(id_permutation(phi_layout.size()), phi_layout);
   return {MLet{std::move(proj_mask),
-               {std::move(arg.pred_name), phi_layout.size()},
+               {arg.pred_name, phi_layout.size()},
                uniq(std::move(phi_state)),
                uniq(std::move(psi_state))},
           std::move(psi_layout)};
@@ -331,7 +332,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
       auto [r_state, r_layout] = init_mstate(*arg.phir);
       auto permutation = find_permutation(l_layout, r_layout);
       return {MOr{uniq(std::move(l_state)), uniq(std::move(r_state)),
-                  permutation, binary_buffer()},
+                  permutation, l_layout.size(), binary_buffer()},
               l_layout};
     } else if constexpr (is_same_v<T, fo::Formula::and_t>) {
       auto rec_state = init_and_state(arg);
@@ -387,20 +388,20 @@ event_table_vec MState::MPred::eval(database &db, const ts_list &ts) {
     for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
       match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp))),
             tab);
-    res_tabs.push_back(std::move(tab));
+    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
   } else if (ty == TS_PRED) {
     event_table tab(nfvs);
     for (size_t curr_ts : ts)
       match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_ts))),
             tab);
-    res_tabs.push_back(std::move(tab));
+    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
   } else if (ty == TPTS_PRED) {
     event_table tab(nfvs);
     for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
       match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp)),
                         common::event_data::Int(static_cast<int64_t>(ts[i]))),
             tab);
-    res_tabs.push_back(std::move(tab));
+    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
   } else {
     const auto it = db.find(std::pair(pred_name, arity));
     if (it == db.end()) {
@@ -410,7 +411,7 @@ event_table_vec MState::MPred::eval(database &db, const ts_list &ts) {
       event_table tab(nfvs);
       for (const auto &ev : ev_for_ts)
         match(ev, tab);
-      res_tabs.push_back(std::move(tab));
+      res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
     }
   }
   return res_tabs;
@@ -431,10 +432,10 @@ event_table_vec MState::MNeg::eval(database &db, const ts_list &ts) {
   res_tabs.reserve(rec_tabs.size());
   std::transform(rec_tabs.cbegin(), rec_tabs.cend(),
                  std::back_inserter(res_tabs), [](const auto &tab) {
-                   if (tab.empty())
-                     return event_table::unit_table();
+                   if (!tab)
+                     return opt_table(event_table::unit_table());
                    else
-                     return event_table::empty_table();
+                     return opt_table();
                  });
   return res_tabs;
 }
@@ -442,27 +443,40 @@ event_table_vec MState::MNeg::eval(database &db, const ts_list &ts) {
 event_table_vec MState::MExists::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
   if (drop_idx)
-    std::for_each(rec_tabs.begin(), rec_tabs.end(),
-                  [this](auto &tab) { tab.drop_col(*drop_idx); });
+    std::for_each(rec_tabs.begin(), rec_tabs.end(), [this](auto &tab) {
+      if (tab)
+        tab->drop_col(*drop_idx);
+    });
   return rec_tabs;
 }
 
 event_table_vec MState::MOr::eval(database &db, const ts_list &ts) {
-  auto reduction_fn = [this](const event_table &tab1, const event_table &tab2) {
-    return tab1.t_union(tab2, r_layout_permutation);
+  auto reduction_fn = [this](const opt_table &tab1,
+                             const opt_table &tab2) -> opt_table {
+    if (!tab2)
+      return tab1;
+    // TODO: replace 5 by correct number
+    auto tab1_tmp = tab1 ? *tab1 : event_table(nfvs_l);
+    tab1_tmp.t_union_in_place(*tab2, r_layout_permutation);
+    return std::move(tab1_tmp);
   };
   return apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state, buf,
                                        db, ts);
 }
 
 event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
-  auto reduction_fn = [this](const event_table &tab1,
-                             const event_table &tab2) -> event_table {
+  auto reduction_fn = [this](const opt_table &tab1,
+                             const opt_table &tab2) -> opt_table {
     if (const auto *anti_join_ptr = var2::get_if<anti_join_info>(&op_info)) {
-      return tab1.anti_join(tab2, *anti_join_ptr);
+      if (!tab1 || !tab2)
+        return tab1;
+      else
+        return tab1->anti_join(*tab2, *anti_join_ptr);
     } else {
+      if (!tab1 || !tab2)
+        return {};
       const auto *join_ptr = var2::get_if<join_info>(&op_info);
-      return tab1.natural_join(tab2, *join_ptr);
+      return tab1->natural_join(*tab2, *join_ptr);
     }
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
@@ -490,9 +504,13 @@ event_table_vec MState::MAndRel::eval(database &db, const ts_list &ts) {
       ret = !ret;
     return ret;
   };
-  std::transform(
-    rec_tabs.cbegin(), rec_tabs.cend(), std::back_inserter(res_tabs),
-    [filter_fn](const auto &tab) { return tab.filter(filter_fn); });
+  std::transform(rec_tabs.cbegin(), rec_tabs.cend(),
+                 std::back_inserter(res_tabs), [filter_fn](const auto &tab) {
+                   if (tab)
+                     return opt_table(tab->filter(filter_fn));
+                   else
+                     return opt_table();
+                 });
   return res_tabs;
 }
 
@@ -502,16 +520,20 @@ event_table_vec MState::MAndAssign::eval(database &db, const ts_list &ts) {
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
   for (const auto &tab : rec_tabs) {
-    event_table new_tab(nfvs);
-    for (const auto &row : tab) {
-      auto row_cp = row;
-      auto trm_eval = t.eval(var_2_idx, row);
-      // fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
-      row_cp.push_back(std::move(trm_eval));
-      // fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
-      new_tab.add_row(std::move(row_cp));
+    if (tab) {
+      event_table new_tab(nfvs);
+      for (const auto &row : *tab) {
+        auto row_cp = row;
+        auto trm_eval = t.eval(var_2_idx, row);
+        // fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
+        row_cp.push_back(std::move(trm_eval));
+        // fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
+        new_tab.add_row(std::move(row_cp));
+      }
+      res_tabs.push_back(std::move(new_tab));
+    } else {
+      res_tabs.emplace_back(std::nullopt);
     }
-    res_tabs.push_back(std::move(new_tab));
   }
   return res_tabs;
 }
@@ -528,20 +550,19 @@ event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {
   res_tabs.reserve(rec_tabs.size() + 1);
   auto tabs_it = rec_tabs.begin();
   if (is_first) {
-    res_tabs.push_back(event_table(num_fvs));
+    res_tabs.emplace_back(std::nullopt);
     is_first = false;
   }
 
   if (past_ts.size() >= 2) {
     if (buf) {
-      std::optional<event_table> taken_val;
+      std::optional<opt_table> taken_val;
       buf.swap(taken_val);
       assert(past_ts[1] >= past_ts[0]);
-      if (inter.contains(past_ts[1] - past_ts[0])) {
+      if (inter.contains(past_ts[1] - past_ts[0]))
         res_tabs.push_back(std::move(*taken_val));
-      } else {
-        res_tabs.push_back(event_table(num_fvs));
-      }
+      else
+        res_tabs.emplace_back(std::nullopt);
       past_ts.pop_front();
     }
     for (auto rec_tabs_end = rec_tabs.end();
@@ -551,7 +572,7 @@ event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {
       if (inter.contains(past_ts[1] - past_ts[0]))
         res_tabs.push_back(std::move(*tabs_it));
       else
-        res_tabs.push_back(event_table(num_fvs));
+        res_tabs.push_back(std::nullopt);
     }
   }
 
@@ -586,7 +607,7 @@ event_table_vec MState::MNext::eval(database &db, const ts_list &ts) {
     if (inter.contains(past_ts[1] - past_ts[0]))
       res_tabs.push_back(std::move(*tabs_it));
     else
-      res_tabs.push_back(event_table(num_fvs));
+      res_tabs.emplace_back(std::nullopt);
   }
   assert(!past_ts.empty() && tabs_it == rec_tabs.end());
   return res_tabs;
@@ -594,8 +615,8 @@ event_table_vec MState::MNext::eval(database &db, const ts_list &ts) {
 
 event_table_vec MState::MUntil::eval(database &db, const ts_list &ts) {
   ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
-  auto reduction_fn = [this](event_table &tab_l,
-                             event_table &tab_r) -> event_table_vec {
+  auto reduction_fn = [this](opt_table &tab_l,
+                             opt_table &tab_r) -> event_table_vec {
     assert(!ts_buf.empty());
     size_t new_ts = ts_buf.front();
     ts_buf.pop_front();
@@ -652,14 +673,16 @@ event_table_vec MState::MLet::eval(database &db, const ts_list &ts) {
   db_ent.reserve(n_l_tabs);
   for (const auto &l_tab : l_tabs) {
     parse::database_elem new_tab;
-    new_tab.reserve(l_tab.tab_size());
-    for (const auto &e : l_tab)
-      new_tab.push_back(filter_row(projection_mask, e));
+    if (l_tab) {
+      new_tab.reserve(l_tab->tab_size());
+      for (const auto &e : *l_tab)
+        new_tab.push_back(filter_row(projection_mask, e));
+    }
     db_ent.push_back(std::move(new_tab));
   }
-  auto new_it = db.emplace(db_idx, std::move(db_ent)).first;
+  db.emplace(db_idx, std::move(db_ent));
   auto res = psi_state->eval(db, ts);
-  db.erase(new_it);
+  db.erase(db_idx);
   if (old_db_ent)
     db.emplace(db_idx, std::move(old_db_ent.value()));
   return res;

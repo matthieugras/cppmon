@@ -16,7 +16,7 @@ using tuple_buf = absl::flat_hash_map<std::vector<common::event_data>, size_t>;
 template<typename SinceBase>
 class shared_agg_base {
 public:
-  event_table produce_result() { return temporal_agg_.finalize_table(); }
+  opt_table produce_result() { return temporal_agg_.finalize_table(); }
 
 protected:
   shared_agg_base(agg_temporal::temporal_aggregation_impl temporal_agg)
@@ -57,8 +57,8 @@ private:
 template<typename SinceBase>
 class shared_no_agg {
 public:
-  event_table produce_result() {
-    SinceBase *base = static_cast<SinceBase *>(this);
+  opt_table produce_result() {
+    auto *base = static_cast<SinceBase *>(this);
     auto &tuple_in = base->tuple_in;
     size_t nfvs = base->nfvs;
 
@@ -78,7 +78,7 @@ public:
       tab.add_row(it->first);
       it = nxt_it;
     }
-    return tab;
+    return tab.empty() ? opt_table() : std::move(tab);
   }
 
 protected:
@@ -103,7 +103,7 @@ class shared_base : public AggBase {
   friend AggBase;
 
 protected:
-  using table_buf = boost::container::devector<std::pair<size_t, event_table>>;
+  using table_buf = boost::container::devector<std::pair<size_t, opt_table>>;
 
   template<typename... Args>
   shared_base(size_t nfvs, fo::Interval inter, Args &&...args)
@@ -126,17 +126,21 @@ protected:
       if (inter.leq_upper(ts - old_ts))
         break;
       auto &tab = data_in.front();
-      for (const auto &e : tab.second) {
-        auto in_it = tuple_in.find(e);
-        if (in_it != tuple_in.end() && in_it->second == tab.first)
-          this->tuple_in_erase(in_it);
-        drop_tuple_from_all_data(e);
+      if (tab.second) {
+        for (const auto &e : *tab.second) {
+          auto in_it = tuple_in.find(e);
+          if (in_it != tuple_in.end() && in_it->second == tab.first)
+            this->tuple_in_erase(in_it);
+          drop_tuple_from_all_data(e);
+        }
       }
     }
     for (; !data_prev.empty() && inter.gt_upper(ts - data_prev.front().first);
          data_prev.pop_front()) {
-      for (const auto &e : data_prev.front().second)
-        drop_tuple_from_all_data(e);
+      if (data_prev.front().second) {
+        for (const auto &e : *data_prev.front().second)
+          drop_tuple_from_all_data(e);
+      }
     }
   }
 
@@ -149,10 +153,12 @@ protected:
       assert(old_ts <= ts);
       if (inter.lt_lower(ts - old_ts))
         break;
-      for (const auto &e : latest.second) {
-        auto since_it = tuple_since.find(e);
-        if (since_it != tuple_since.end() && since_it->second <= old_ts)
-          this->tuple_in_update(e, old_ts);
+      if (latest.second) {
+        for (const auto &e : *latest.second) {
+          auto since_it = tuple_since.find(e);
+          if (since_it != tuple_since.end() && since_it->second <= old_ts)
+            this->tuple_in_update(e, old_ts);
+        }
       }
       if (!interval_inf) {
         assert(data_in.empty() || old_ts >= data_in.back().first);
@@ -161,15 +167,19 @@ protected:
     }
   }
 
-  void add_new_table(event_table &&tab_r, size_t ts) {
-    for (const auto &e : tab_r) {
-      tuple_since.try_emplace(e, ts);
-      if (!interval_inf)
-        all_data_counted[e]++;
+  void add_new_table(opt_table &tab_r, size_t ts) {
+    if (tab_r) {
+      for (const auto &e : *tab_r) {
+        tuple_since.try_emplace(e, ts);
+        if (!interval_inf)
+          all_data_counted[e]++;
+      }
     }
     if (inter.contains(0)) {
-      for (const auto &e : tab_r)
-        this->tuple_in_update(e, ts);
+      if (tab_r) {
+        for (const auto &e : *tab_r)
+          this->tuple_in_update(e, ts);
+      }
       if (!interval_inf) {
         assert(data_in.empty() || ts >= data_in.back().first);
         data_in.emplace_back(ts, std::move(tab_r));
@@ -190,10 +200,10 @@ protected:
 template<typename SinceBase>
 class since_base : public SinceBase {
 public:
-  event_table eval(event_table &tab_l, event_table &tab_r, size_t new_ts) {
+  opt_table eval(opt_table &tab_l, opt_table &tab_r, size_t new_ts) {
     this->add_new_ts(new_ts);
     this->join(tab_l);
-    this->add_new_table(std::move(tab_r), new_ts);
+    this->add_new_table(tab_r, new_ts);
     return this->produce_result();
   }
 
@@ -203,16 +213,21 @@ protected:
       : SinceBase(std::forward<Args>(args)...), left_negated(left_negated),
         comm_idx_r(std::move(comm_idx_r)) {}
 
-  void join(event_table &tab_l) {
-    auto hash_set = event_table::hash_all_destructive(tab_l);
-    auto erase_cond = [this, &hash_set](const auto &tup) {
-      if (left_negated)
-        return hash_set.contains(filter_row(comm_idx_r, tup.first));
-      else
-        return !hash_set.contains(filter_row(comm_idx_r, tup.first));
-    };
-    absl::erase_if(this->tuple_since, erase_cond);
-    this->tuple_in_erase_if(erase_cond);
+  void join(opt_table &tab_l) {
+    if (tab_l) {
+      auto hash_set = event_table::hash_all_destructive(*tab_l);
+      auto erase_cond = [this, &hash_set](const auto &tup) {
+        if (left_negated)
+          return hash_set.contains(filter_row(comm_idx_r, tup.first));
+        else
+          return !hash_set.contains(filter_row(comm_idx_r, tup.first));
+      };
+      absl::erase_if(this->tuple_since, erase_cond);
+      this->tuple_in_erase_if(erase_cond);
+    } else if (!left_negated) {
+      this->tuple_in.clear();
+      this->tuple_since.clear();
+    }
   }
 
   bool left_negated;
@@ -222,9 +237,9 @@ protected:
 template<typename OnceBase>
 class once_base : public OnceBase {
 public:
-  event_table eval(event_table &tab_r, size_t new_ts) {
+  opt_table eval(opt_table &tab_r, size_t new_ts) {
     this->add_new_ts(new_ts);
-    this->add_new_table(std::move(tab_r), new_ts);
+    this->add_new_table(tab_r, new_ts);
     return this->produce_result();
   }
 
