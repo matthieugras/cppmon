@@ -344,7 +344,7 @@ Formula Formula::from_json(const json &json_formula) {
     std::transform(json_formula.at(2).cbegin(), json_formula.at(2).cend(),
                    std::back_inserter(trm_list),
                    [](const json &j) -> Term { return Term::from_json(j); });
-    return Formula::Pred(std::move(pred_name), std::move(trm_list));
+    return Formula::Pred(std::move(pred_name), std::move(trm_list), false);
   } else if (fo_ty == "Eq"sv) {
     return Formula::Eq(Term::from_json(json_formula.at(1)),
                        Term::from_json(json_formula.at(2)));
@@ -392,6 +392,20 @@ Formula Formula::from_json(const json &json_formula) {
     auto phi = Formula::from_json(json_formula.at(2));
     auto psi = Formula::from_json(json_formula.at(3));
     return Formula::Let(std::move(pred_name), std::move(phi), std::move(psi));
+  } else if (fo_ty == "TP"sv) {
+    std::string pred_name = "tp";
+    return Pred(pred_name, make_vector(Term::from_json(json_formula.at(1))),
+                true);
+  } else if (fo_ty == "TS"sv) {
+    std::string pred_name = "ts";
+    return Pred(pred_name, make_vector(Term::from_json(json_formula.at(1))),
+                true);
+  } else if (fo_ty == "TPTS"sv) {
+    std::string pred_name = "tpts";
+    return Pred(pred_name,
+                make_vector(Term::from_json(json_formula.at(1)),
+                            Term::from_json(json_formula.at(2))),
+                true);
   } else {
     throw std::runtime_error("formula type not supported");
   }
@@ -404,8 +418,9 @@ Formula::Formula(val_type &&val) noexcept
 
 Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 
-Formula Formula::Pred(name pred_name, vector<Term> pred_args) {
-  return Formula(pred_t{std::move(pred_name), std::move(pred_args)});
+Formula Formula::Pred(name pred_name, vector<Term> pred_args, bool is_builtin) {
+  return Formula(
+    pred_t{std::move(pred_name), std::move(pred_args), is_builtin});
 }
 
 Formula Formula::Eq(Term l, Term r) {

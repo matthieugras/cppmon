@@ -204,14 +204,18 @@ MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
 MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
   size_t n_args = arg.pred_args.size();
   MPred::pred_ty pred_ty;
-  if (arg.pred_name == "tp" && n_args == 1)
-    pred_ty = MPred::TP_PRED;
-  else if (arg.pred_name == "ts" && n_args == 1)
-    pred_ty = MPred::TS_PRED;
-  else if (arg.pred_name == "tpts" && n_args == 2)
-    pred_ty = MPred::TPTS_PRED;
-  else
+  if (arg.is_builtin) {
+    if (arg.pred_name == "tp" && n_args == 1)
+      pred_ty = MPred::TP_PRED;
+    else if (arg.pred_name == "ts" && n_args == 1)
+      pred_ty = MPred::TS_PRED;
+    else if (arg.pred_name == "tpts" && n_args == 2)
+      pred_ty = MPred::TPTS_PRED;
+    else
+      throw std::runtime_error("unknown builtin predicate");
+  } else {
     pred_ty = MPred::OTHER_PRED;
+  }
   absl::flat_hash_map<size_t, vector<size_t>> var_2_pred_pos;
   vector<pair<size_t, event_data>> pos_2_cst;
   for (size_t i = 0; i < n_args; ++i) {
@@ -504,13 +508,17 @@ event_table_vec MState::MAndRel::eval(database &db, const ts_list &ts) {
       ret = !ret;
     return ret;
   };
-  std::transform(rec_tabs.cbegin(), rec_tabs.cend(),
-                 std::back_inserter(res_tabs), [filter_fn](const auto &tab) {
-                   if (tab)
-                     return opt_table(tab->filter(filter_fn));
-                   else
-                     return opt_table();
-                 });
+  for (const auto &tab : rec_tabs) {
+    if (tab) {
+      auto new_tab = tab->filter(filter_fn);
+      if (new_tab.empty())
+        res_tabs.emplace_back(std::nullopt);
+      else
+        res_tabs.emplace_back(std::move(new_tab));
+    } else {
+      res_tabs.emplace_back(std::nullopt);
+    }
+  }
   return res_tabs;
 }
 
