@@ -17,6 +17,7 @@ extern "C" {
 typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
+  int online_monitoring : 1;
   int unbounded_buf : 1;
 } ev_src_init_flags;
 
@@ -55,9 +56,9 @@ namespace ipc {
 
 class event_source {
 public:
-  event_source(bool log_to_file, bool log_to_stdout,
+  event_source(bool log_to_file, bool log_to_stdout, bool online_monitoring,
                const std::string &socket_path, size_t wbuf_size,
-               bool unbounded_buffer, std::string log_path = "output.log");
+               bool unbounded_buffer, const std::string &log_path);
 
   void set_error(std::string s);
   const char *get_error() const;
@@ -77,7 +78,7 @@ private:
   size_t events_in_db_;
   std::optional<fmt::ostream> log_file_;
   bool do_log_, at_least_one_db_;
-  serialization::serializer serial_;
+  std::optional<serialization::serializer> serial_;
 };
 }// namespace ipc
 

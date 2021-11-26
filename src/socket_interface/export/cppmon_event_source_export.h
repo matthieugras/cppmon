@@ -35,18 +35,24 @@ typedef union {
  * @struct flags
  *
  * @var log_to_file
- * Write trace to file
+ * Write trace to file. Cannot be combined with stdout logging.
  *
  * @var log_to_stdout
- * Print trace to stdout
+ * Print trace to stdout. Cannot be combined with file logging.
+ *
+ * @var online_monitoring
+ * Enable online monitoring support over UDS. Must be combined with either file
+ * or stdout logging
  *
  * @var unbounded_buf
  * Use an unbounded buffer to avoid blocking. This is slower than the blocking
- * version because of synchronization overhead.
+ * version because of synchronization overhead. Unused if online_monitoring is
+ * set to false.
  */
 typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
+  int online_monitoring : 1;
   int unbounded_buf : 1;
 } ev_src_init_flags;
 
@@ -55,7 +61,7 @@ typedef struct {
  * Intialization options for the socket interface
  *
  * @var flags
- * Flags
+ * Flags as specified above.
  *
  * @var wbuf_size
  * Number of bytes that are buffered before writing to the UDS. If
@@ -66,7 +72,7 @@ typedef struct {
  * Path for the output trace. Can be set to NULL if file logging is not used.
  *
  * @var uds_sock_path
- * Path of the UDS. Uses a default value if set to NULL
+ * Path of the UDS. Can be set to NULL if online monitoring is not used.
  */
 typedef struct {
   ev_src_init_flags flags;

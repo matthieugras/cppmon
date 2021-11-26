@@ -133,7 +133,7 @@ void differential_test::run_single_test(size_t iter_num, fs::path wdir) {
 void differential_test::run_tests() {
   boost::asio::thread_pool pool(13);
   free_slots_ = std::make_unique<std::counting_semaphore<>>(30);
-  for (size_t iter_num = 0; iter_num < 400000; ++iter_num) {
+  for (size_t iter_num = 0; iter_num < 1000 /*400000 */; ++iter_num) {
     if (iter_num % 1000 == 0)
       fmt::print("iteration {}\n", iter_num);
     free_slots_->acquire();

@@ -8,18 +8,15 @@
 EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
   try {
     bool log_to_file = options->flags.log_to_file,
-         log_to_stdout = options->flags.log_to_stdout;
-    std::string uds_sock_path = options->uds_sock_path
-                                  ? std::string(options->uds_sock_path)
-                                  : "cppmon_uds";
-    if (options->log_path)
-      return new ipc::event_source(
-        log_to_file, log_to_stdout, uds_sock_path, options->wbuf_size,
-        options->flags.unbounded_buf, std::string(options->log_path));
-    else
-      return new ipc::event_source(log_to_file, log_to_stdout, uds_sock_path,
-                                   options->wbuf_size,
-                                   options->flags.unbounded_buf);
+         log_to_stdout = options->flags.log_to_stdout,
+         online_monitoring = options->flags.online_monitoring;
+    std::string uds_sock_path =
+      options->uds_sock_path ? std::string(options->uds_sock_path) : "";
+    std::string log_path =
+      options->log_path ? std::string(options->log_path) : "";
+    return new ipc::event_source(log_to_file, log_to_stdout, online_monitoring,
+                                 uds_sock_path, options->wbuf_size,
+                                 options->flags.unbounded_buf, log_path);
   } catch (const std::exception &e) {
     fmt::print(stderr,
                "failed to initialize context because of exception: {}\n"
@@ -97,37 +94,48 @@ namespace ipc {
 void event_source::set_error(std::string s) { last_error_ = std::move(s); }
 
 const char *event_source::get_error() const {
-  if (last_error_ == "")
+  if (last_error_.empty())
     return nullptr;
   else
     return last_error_.c_str();
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,
+                           bool online_monitoring,
                            const std::string &socket_path, size_t wbuf_size,
-                           bool unbounded_buffer, std::string log_path)
-    : events_in_db_(0), do_log_(false), at_least_one_db_(false),
-      serial_(socket_path, wbuf_size, unbounded_buffer) {
+                           bool unbounded_buffer, const std::string &log_path)
+    : events_in_db_(0), do_log_(false), at_least_one_db_(false) {
+  if (log_to_file && log_to_stdout)
+    throw std::runtime_error("logging to file + stdout is not supported");
+  if (!log_to_file && !log_to_stdout && !online_monitoring)
+    throw std::runtime_error(
+      "offline monitoring without event logging does not make sense");
   if (log_to_file || log_to_stdout)
     do_log_ = true;
   if (log_to_file)
     log_file_.emplace(fmt::output_file(log_path));
+  if (online_monitoring)
+    serial_.emplace(socket_path, wbuf_size, unbounded_buffer);
 }
 
 void event_source::terminate() {
-  if (at_least_one_db_)
-    serial_.send_end_db();
-  serial_.send_terminate();
+  if (serial_) {
+    if (at_least_one_db_)
+      serial_->send_end_db();
+    serial_->send_terminate();
+  }
 
   if (do_log_)
     print_db();
 }
 
 void event_source::add_database(size_t timestamp) {
-  if (at_least_one_db_)
-    serial_.send_end_db();
-  serial_.send_begin_db(timestamp);
-  at_least_one_db_ = true;
+  if (serial_) {
+    if (at_least_one_db_)
+      serial_->send_end_db();
+    serial_->send_begin_db(timestamp);
+    at_least_one_db_ = true;
+  }
 
   if (do_log_) {
     print_db();
@@ -137,7 +145,8 @@ void event_source::add_database(size_t timestamp) {
 
 void event_source::add_event(char *name, const c_ev_ty *tys,
                              const c_ev_data *data, size_t arity) {
-  serial_.send_event(name, tys, data, arity);
+  if (serial_)
+    serial_->send_event(name, tys, data, arity);
   if (do_log_)
     print_event(name, tys, data, arity);
 }
