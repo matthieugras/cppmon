@@ -1,9 +1,9 @@
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <socket_event_source.h>
 #include <stdexcept>
-#include <stdlib.h>
 
 EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
   try {
@@ -54,7 +54,7 @@ EXPORT_C int ev_src_add_db(ev_src_ctxt *ctx, size_t timestamp) {
   return -1;
 }
 
-EXPORT_C int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
+EXPORT_C int ev_src_add_ev(ev_src_ctxt *ctx, const char *ev_name,
                            const c_ev_ty *ev_types, const c_ev_data *data,
                            size_t arity) {
   try {
@@ -70,7 +70,8 @@ EXPORT_C int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
 }
 
 EXPORT_C int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp,
-                                     char *ev_name, const c_ev_ty *ev_types,
+                                     const char *ev_name,
+                                     const c_ev_ty *ev_types,
                                      const c_ev_data *data, size_t arity) {
   int ret;
   if ((ret = ev_src_add_db(ctx, timestamp)) < 0)
@@ -87,7 +88,7 @@ EXPORT_C const char *ev_src_last_err(ev_src_ctxt *ctx) {
     fmt::print(stderr, "failed to get the error string\n");
     std::abort();
   }
-};
+}
 
 namespace ipc {
 
@@ -143,7 +144,7 @@ void event_source::add_database(size_t timestamp) {
   }
 }
 
-void event_source::add_event(char *name, const c_ev_ty *tys,
+void event_source::add_event(const char *name, const c_ev_ty *tys,
                              const c_ev_data *data, size_t arity) {
   if (serial_)
     serial_->send_event(name, tys, data, arity);
@@ -173,7 +174,7 @@ void event_source::print_event_data(c_ev_ty ty, const c_ev_data &data) {
     curr_db_str_ += fmt::format("\"{}\",", data.s);
 }
 
-void event_source::print_event(char *name, const c_ev_ty *tys,
+void event_source::print_event(const char *name, const c_ev_ty *tys,
                                const c_ev_data *data, size_t arity) {
   curr_db_str_ += fmt::format("{}(", name);
   for (size_t i = 0; i < arity; ++i)

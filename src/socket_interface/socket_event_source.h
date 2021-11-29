@@ -32,11 +32,12 @@ LINK_API ev_src_ctxt *ev_src_init(const ev_src_init_opts *options);
 LINK_API void ev_src_free(ev_src_ctxt *ctx);
 LINK_API int ev_src_teardown(ev_src_ctxt *ctx);
 LINK_API int ev_src_add_db(ev_src_ctxt *ctx, size_t timestamp);
-LINK_API int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name,
+LINK_API int ev_src_add_ev(ev_src_ctxt *ctx, const char *ev_name,
                            const c_ev_ty *ev_types, const c_ev_data *data,
                            size_t arity);
 LINK_API int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp,
-                                     char *ev_name, const c_ev_ty *ev_types,
+                                     const char *ev_name,
+                                     const c_ev_ty *ev_types,
                                      const c_ev_data *data, size_t arity);
 LINK_API const char *ev_src_last_err(ev_src_ctxt *ctx);
 }
@@ -64,13 +65,13 @@ public:
   const char *get_error() const;
   void terminate();
   void add_database(size_t timestamp);
-  void add_event(char *name, const c_ev_ty *tys, const c_ev_data *data,
+  void add_event(const char *name, const c_ev_ty *tys, const c_ev_data *data,
                  size_t arity);
 
 private:
   void print_db();
   void print_event_data(c_ev_ty ty, const c_ev_data &data);
-  void print_event(char *name, const c_ev_ty *tys, const c_ev_data *data,
+  void print_event(const char *name, const c_ev_ty *tys, const c_ev_data *data,
                    size_t arity);
 
   std::string last_error_;

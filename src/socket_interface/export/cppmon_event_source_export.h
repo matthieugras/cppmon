@@ -121,8 +121,8 @@ int ev_src_add_db(ev_src_ctxt *ctx, size_t timestamp);
  * @param arity Number of event arguments
  * @return -1 failure (sets last_err), 0 if successful
  */
-int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name, const c_ev_ty *ev_types,
-                  const c_ev_data *data, size_t arity);
+int ev_src_add_ev(ev_src_ctxt *ctx, const char *ev_name,
+                  const c_ev_ty *ev_types, const c_ev_data *data, size_t arity);
 
 /*!
  * Adds a database that contains a single event
@@ -134,9 +134,9 @@ int ev_src_add_ev(ev_src_ctxt *ctx, char *ev_name, const c_ev_ty *ev_types,
  * @param arity Number of event arguments
  * @return -1 failure (sets last_err), 0 if successful
  */
-int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp, char *ev_name,
-                            const c_ev_ty *ev_types, const c_ev_data *data,
-                            size_t arity);
+int ev_src_add_singleton_db(ev_src_ctxt *ctx, size_t timestamp,
+                            const char *ev_name, const c_ev_ty *ev_types,
+                            const c_ev_data *data, size_t arity);
 
 /*!
  * Get the last error
