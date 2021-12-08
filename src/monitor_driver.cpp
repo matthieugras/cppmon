@@ -5,7 +5,7 @@ void print_satisfactions(monitor::satisfactions &sats) {
     if (tbl.empty())
       continue;
     std::sort(tbl.begin(), tbl.end());
-    fmt::print("@{}. (time point {}):", ts, tp);
+    fmt::print("@{} (time point {}):", ts, tp);
     if (tbl.size() == 1 && tbl[0].empty())
       fmt::print(" true\n");
     else {
