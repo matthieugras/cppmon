@@ -89,7 +89,7 @@ namespace detail {
   private:
     event_table_vec eval(database &db, const ts_list &ts);
     struct MRel {
-      event_table tab;
+      opt_table tab;
       event_table_vec eval(database &db, const ts_list &ts);
     };
 

@@ -11,7 +11,6 @@ monitor::monitor(const Formula &formula) : curr_tp_(0) {
     if (!layout_fvs.insert(var).second)
       throw std::runtime_error("returned table layout contains duplicates");
   }
-  // fmt::print("layout_fvs: {}, formula_fvs: {}\n", layout_fvs, formula.fvs());
   assert(layout_fvs == formula.fvs());
 #endif
   state_ = MState(std::move(state_tmp));
@@ -73,7 +72,7 @@ MState::init_pair MState::init_eq_state(const fo::Formula::eq_t &arg) {
     if (*lcst == *rcst)
       return {MRel{event_table::unit_table()}, {}};
     else
-      return {MRel{event_table::empty_table()}, {}};
+      return {MRel{{}}, {}};
   }
   assert(l.is_var() && rcst || lcst && r.is_var());
   if (l.is_var())
@@ -94,8 +93,6 @@ MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
             info.result_layout};
   } else {
     auto info = get_join_info(l_layout, r_layout);
-    /*fmt::print("and join, child_l: {}, child_r: {}, my: {}\n", l_layout,
-               r_layout, info.result_layout);*/
     return {MAnd{binary_buffer(), uniq(std::move(l_state)),
                  uniq(std::move(r_state)), info},
             info.result_layout};
@@ -140,7 +137,6 @@ MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
     throw std::runtime_error("unknown constraint");
   }
   auto var_2_idx = get_sparse_var_2_idx(rec_layout);
-  // fmt::print("for constraint, var_2_idx is: {}\n", var_2_idx);
   return {MAndRel{uniq(std::move(rec_state)), std::move(var_2_idx), *t1, *t2,
                   cst_type, cst_neg},
           std::move(rec_layout)};
@@ -175,8 +171,6 @@ MState::init_pair MState::init_and_safe_assign(const fo::Formula &phil,
     }
     auto var_2_idx = get_sparse_var_2_idx(rec_layout);
     rec_layout.push_back(new_var);
-    // fmt::print("rec_layout and assign: {}, nfvs: {}\n", rec_layout,
-    // rec_layout.size());
     return {MAndAssign{uniq(std::move(rec_state)), std::move(var_2_idx),
                        *trm_to_eval, rec_layout.size()},
             std::move(rec_layout)};
@@ -239,7 +233,6 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
                            arg.pred_args,
                            std::move(var_pos),
                            std::move(pos_2_cst)};
-  // mpred_state.print_state();
   return {std::move(mpred_state), lay};
 }
 
@@ -324,7 +317,7 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
         auto rec_st = init_mstate(*arg.phi).first;
         return {MNeg{uniq(std::move(rec_st))}, {}};
       } else {
-        return {MRel{event_table::empty_table()}, {}};
+        return {MRel{{}}, {}};
       }
     } else if constexpr (is_same_v<T, fo::Formula::eq_t>) {
       return init_eq_state(arg);
@@ -409,7 +402,8 @@ event_table_vec MState::MPred::eval(database &db, const ts_list &ts) {
   } else {
     const auto it = db.find(std::pair(pred_name, arity));
     if (it == db.end()) {
-      return {event_table(nfvs)};
+      res_tabs.emplace_back(std::nullopt);
+      return res_tabs;
     }
     for (const auto &ev_for_ts : it->second) {
       event_table tab(nfvs);
@@ -472,10 +466,11 @@ event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
   auto reduction_fn = [this](const opt_table &tab1,
                              const opt_table &tab2) -> opt_table {
     if (const auto *anti_join_ptr = var2::get_if<anti_join_info>(&op_info)) {
-      if (!tab1 || !tab2)
+      if (!tab1 || !tab2) {
         return tab1;
-      else
+      } else {
         return tab1->anti_join(*tab2, *anti_join_ptr);
+      }
     } else {
       if (!tab1 || !tab2)
         return {};
@@ -485,7 +480,6 @@ event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
   };
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
-  // fmt::print("MAND returned: {}\n", ret);
   return ret;
 }
 
@@ -524,7 +518,6 @@ event_table_vec MState::MAndRel::eval(database &db, const ts_list &ts) {
 
 event_table_vec MState::MAndAssign::eval(database &db, const ts_list &ts) {
   auto rec_tabs = state->eval(db, ts);
-  // fmt::print("MAndAssign::eval rec_tabs: {}\n", rec_tabs);
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size());
   for (const auto &tab : rec_tabs) {
@@ -533,9 +526,7 @@ event_table_vec MState::MAndAssign::eval(database &db, const ts_list &ts) {
       for (const auto &row : *tab) {
         auto row_cp = row;
         auto trm_eval = t.eval(var_2_idx, row);
-        // fmt::print("MAndAssign::eval trm_eval: {}\n", trm_eval);
         row_cp.push_back(std::move(trm_eval));
-        // fmt::print("MAndAssign::eval new_row: {}\n", row_cp);
         new_tab.add_row(std::move(row_cp));
       }
       res_tabs.push_back(std::move(new_tab));
@@ -552,8 +543,6 @@ event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {
   if (rec_tabs.empty()) {
     return rec_tabs;
   }
-  /*fmt::print("rec_tabs not empty, rec_tabs: {}, past_ts: {}, buf: {}\n",
-             rec_tabs, past_ts, buf);*/
   event_table_vec res_tabs;
   res_tabs.reserve(rec_tabs.size() + 1);
   auto tabs_it = rec_tabs.begin();
@@ -585,16 +574,12 @@ event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {
   }
 
   if (tabs_it != rec_tabs.end()) {
-    /*fmt::print("print before assert res_tabs: {}, past_ts: {}, buf: {}\n",
-       res_tabs, past_ts, buf);*/
     assert(!buf);
     buf.emplace(std::move(*tabs_it));
     tabs_it++;
   }
 
   assert(tabs_it == rec_tabs.end());
-  /*fmt::print("returning res_tabs: {}, past_ts: {}, buf: {}\n", res_tabs,
-             past_ts, buf);*/
   return res_tabs;
 }
 
