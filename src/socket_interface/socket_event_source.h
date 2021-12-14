@@ -18,7 +18,7 @@ typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
   int online_monitoring : 1;
-  int unbounded_buf : 1;
+  int insert_latency_markers: 1;
 } ev_src_init_flags;
 
 typedef struct {
@@ -44,6 +44,7 @@ LINK_API const char *ev_src_last_err(ev_src_ctxt *ctx);
 
 // ================================ C++ API ================================  //
 
+#include <absl/time/clock.h>
 #include <boost/system/error_code.hpp>
 #include <fmt/format.h>
 #include <fmt/os.h>
@@ -59,7 +60,7 @@ class event_source {
 public:
   event_source(bool log_to_file, bool log_to_stdout, bool online_monitoring,
                const std::string &socket_path, size_t wbuf_size,
-               bool unbounded_buffer, const std::string &log_path);
+               const std::string &log_path, bool measure_latency);
 
   void set_error(std::string s);
   const char *get_error() const;
@@ -69,6 +70,7 @@ public:
                  size_t arity);
 
 private:
+  void handle_latency_marker(absl::Duration d);
   void print_db();
   void print_event_data(c_ev_ty ty, const c_ev_data &data);
   void print_event(const char *name, const c_ev_ty *tys, const c_ev_data *data,
@@ -78,7 +80,8 @@ private:
   std::string curr_db_str_;
   size_t events_in_db_;
   std::optional<fmt::ostream> log_file_;
-  bool do_log_, at_least_one_db_;
+  bool do_log_, at_least_one_db_, measure_latency_;
+  size_t last_marker_;
   std::optional<serialization::serializer> serial_;
 };
 }// namespace ipc

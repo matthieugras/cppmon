@@ -19,14 +19,15 @@ int main(int argc, char *argv[]) {
   while (true) {
     // std::this_thread::sleep_for(10ms);
     benchmark::DoNotOptimize(deser);
-    auto ret = deser.read_database();
+    int64_t wm; ipc::serialization::ts_database db;
+    auto ret = deser.read_database(db, wm);
     benchmark::DoNotOptimize(ret);
-    if (!ret) {
+    if (ret == 0) {
       fmt::print("received {} dbs\n", num_dbs);
       break;
-    } else {
-      // fmt::print("received ts: {}, db: {}\n", ret->second, ret->first);
-      num_dbs += ret->second.size();
+      deser.send_eof();
+    } else if (ret == 1) {
+        num_dbs += db.second.size();
     }
   }
 }

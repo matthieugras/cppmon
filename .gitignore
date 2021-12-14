@@ -1,4 +1,5 @@
 builddir
+install
 builddir_debug
 build
 .idea
@@ -40,3 +41,5 @@ compile_commands.json
 *.exe
 *.out
 *.app
+
+tags

@@ -23,6 +23,7 @@ private:
   monitor::monitor monitor_;
   parse::signature sig_;
   ipc::serialization::deserializer deser_;
+  int64_t saved_wm_;
 };
 
 
