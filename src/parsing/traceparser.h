@@ -1,6 +1,7 @@
 #ifndef TRACEPARSER_H
 #define TRACEPARSER_H
 
+#include <lexy/dsl/delimited.hpp>
 #define LEXY_IGNORE_DEPRECATED_OPT_LIST 1
 
 #include <absl/container/flat_hash_map.h>
@@ -104,14 +105,14 @@ private:
     static constexpr auto whitespace = dsl::ascii::blank / dsl::ascii::newline;
 
     RULE dsl::opt_list(dsl::peek_not(dsl::eof) >> dsl::p<pred_sig>);
-    static constexpr auto fold_fn =
-      [](signature &sig, pred_sig::res_type &&psig) {
-        if (!sig.insert(std::move(psig)).second)
-          throw std::runtime_error("duplicate predicate");
-      };
+    static constexpr auto fold_fn = [](signature &sig,
+                                       pred_sig::res_type &&psig) {
+      if (!sig.insert(std::move(psig)).second)
+        throw std::runtime_error("duplicate predicate");
+    };
 
-    VALUE lexy::fold_inplace<signature>(std::initializer_list<signature::init_type>{},
-                                  fold_fn);
+    VALUE lexy::fold_inplace<signature>(
+      std::initializer_list<signature::init_type>{}, fold_fn);
   };
 };
 
@@ -123,7 +124,7 @@ public:
 
 private:
   signature sig_;
-  struct number_arg {
+  struct number_arg : lexy::token_production {
     using res_type = var2::variant<std::string_view, std::string>;
     RULE[] {
       auto exp_l = dsl::lit_c<'e'> / dsl::lit_c<'E'>;
@@ -137,14 +138,15 @@ private:
     });
   };
 
-  struct string_arg {
+  struct string_arg : lexy::token_production {
     using res_type = number_arg::res_type;
-    RULE dsl::quoted(dsl::ascii::alpha_digit_underscore);
+    RULE dsl::quoted(dsl::code_point - dsl::ascii::control,
+                     dsl::backslash_escape.capture(dsl::lit_c<'"'>));
     VALUE lexy::as_string<std::string> >>
       lexy::bind(lexy::construct<res_type>, var2::in_place_index<1>, lexy::_1);
   };
 
-  struct arg_value {
+  struct arg_value : lexy::token_production {
     using res_type = number_arg::res_type;
     RULE dsl::peek(dsl::digit<> / dsl::lit_c<'-'>) >> dsl::p<number_arg> |
       dsl::else_ >> dsl::p<string_arg>;
@@ -159,7 +161,8 @@ private:
 
   struct arg_tuple_list {
     using res_type = std::vector<arg_tuple::res_type>;
-    RULE dsl::list(dsl::peek_not(dsl::ascii::space / dsl::semicolon) >>
+    RULE dsl::list(dsl::peek_not(dsl::ascii::alpha_digit_underscore /
+                                 dsl::semicolon) >>
                    dsl::p<arg_tuple>);
     VALUE lexy::as_list<res_type>;
   };
@@ -245,7 +248,8 @@ private:
 
 
   struct db_parse {
-    RULE dsl::list(dsl::p<named_arg_tup_list>, dsl::sep(dsl::ascii::blank));
+    RULE dsl::list(dsl::peek(dsl::ascii::alpha_digit_underscore) >>
+                   dsl::p<named_arg_tup_list>);
     static constexpr auto fold_fn = [](database &db,
                                        named_arg_tup_list::res_type &&elem) {
       auto it = db.find(elem.first);
@@ -267,7 +271,9 @@ private:
   };
 
   struct ts_db_parse {
-    RULE dsl::at_sign + dsl::p<ts_parse> + dsl::ascii::blank +
+    static constexpr auto whitespace = dsl::ascii::blank / dsl::ascii::newline;
+
+    RULE dsl::at_sign + dsl::p<ts_parse> +
       dsl::opt(dsl::peek_not(dsl::semicolon) >> dsl::p<db_parse>) +
       dsl::semicolon + dsl::if_(dsl::ascii::newline) + dsl::eof;
     VALUE lexy::callback<timestamped_database>(

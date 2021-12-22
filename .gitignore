@@ -40,3 +40,5 @@ compile_commands.json
 *.exe
 *.out
 *.app
+
+tags
