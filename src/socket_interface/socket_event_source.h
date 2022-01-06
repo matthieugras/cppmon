@@ -18,7 +18,6 @@ typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
   int online_monitoring : 1;
-  int insert_latency_markers: 1;
 } ev_src_init_flags;
 
 typedef struct {
@@ -26,6 +25,7 @@ typedef struct {
   size_t wbuf_size;
   char *log_path;
   char *uds_sock_path;
+  char *latency_tracking_path;
 } ev_src_init_opts;
 
 LINK_API ev_src_ctxt *ev_src_init(const ev_src_init_opts *options);
@@ -60,7 +60,8 @@ class event_source {
 public:
   event_source(bool log_to_file, bool log_to_stdout, bool online_monitoring,
                const std::string &socket_path, size_t wbuf_size,
-               const std::string &log_path, bool measure_latency);
+               const std::string &log_path,
+               std::optional<std::string> lat_track_path);
 
   void set_error(std::string s);
   const char *get_error() const;
@@ -80,9 +81,10 @@ private:
   std::string curr_db_str_;
   size_t events_in_db_;
   std::optional<fmt::ostream> log_file_;
-  bool do_log_, at_least_one_db_, measure_latency_;
+  bool do_log_, at_least_one_db_;
   size_t last_marker_;
   std::optional<serialization::serializer> serial_;
+  std::optional<fmt::ostream> lat_out_;
 };
 }// namespace ipc
 

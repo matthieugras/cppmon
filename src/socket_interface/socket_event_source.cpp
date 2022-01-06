@@ -9,15 +9,18 @@ EXPORT_C ev_src_ctxt *ev_src_init(const ev_src_init_opts *options) {
   try {
     bool log_to_file = options->flags.log_to_file,
          log_to_stdout = options->flags.log_to_stdout,
-         online_monitoring = options->flags.online_monitoring,
-         measure_latency = options->flags.insert_latency_markers;
+         online_monitoring = options->flags.online_monitoring;
+    std::optional<std::string> lat_track_path =
+      options->latency_tracking_path
+        ? std::optional(options->latency_tracking_path)
+        : std::nullopt;
     std::string uds_sock_path =
       options->uds_sock_path ? std::string(options->uds_sock_path) : "";
     std::string log_path =
       options->log_path ? std::string(options->log_path) : "";
     return new ipc::event_source(log_to_file, log_to_stdout, online_monitoring,
                                  uds_sock_path, options->wbuf_size, log_path,
-                                 measure_latency);
+                                 std::move(lat_track_path));
   } catch (const std::exception &e) {
     fmt::print(stderr,
                "failed to initialize context because of exception: {}\n"
@@ -103,15 +106,17 @@ const char *event_source::get_error() const {
 }
 
 void event_source::handle_latency_marker(absl::Duration d) {
-  fmt::print("latency of {}\n", absl::ToInt64Microseconds(d));
+  auto now = absl::ToUnixMicros(absl::Now());
+  fmt::print("{},{}\n", now, absl::ToInt64Microseconds(d));
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,
                            bool online_monitoring,
                            const std::string &socket_path, size_t wbuf_size,
-                           const std::string &log_path, bool measure_latency)
+                           const std::string &log_path,
+                           std::optional<std::string> lat_track_path)
     : events_in_db_(0), do_log_(false), at_least_one_db_(false),
-      measure_latency_(measure_latency), last_marker_(0) {
+      last_marker_(0) {
   if (log_to_file && log_to_stdout)
     throw std::runtime_error("logging to file + stdout is not supported");
   if (!log_to_file && !log_to_stdout && !online_monitoring)
@@ -122,12 +127,15 @@ event_source::event_source(bool log_to_file, bool log_to_stdout,
   if (log_to_file)
     log_file_.emplace(fmt::output_file(log_path));
   if (online_monitoring) {
-    if (measure_latency)
+    if (lat_track_path) {
+      lat_out_.emplace(fmt::output_file(*lat_track_path));
+      lat_out_->print("timestamp,latency\n");
       serial_.emplace(socket_path, wbuf_size,
                       std::bind(&event_source::handle_latency_marker, this,
                                 std::placeholders::_1));
-    else
+    } else {
       serial_.emplace(socket_path, wbuf_size, nullptr);
+    }
   }
 }
 
@@ -148,7 +156,7 @@ void event_source::add_database(size_t timestamp) {
       serial_->chunk_end_db();
       last_marker_++;
     }
-    if (measure_latency_ && last_marker_ >= 100) {
+    if (lat_out_ && last_marker_ >= 100) {
       last_marker_ = 0;
       serial_->chunk_latency_marker();
     }

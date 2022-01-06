@@ -48,7 +48,6 @@ typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
   int online_monitoring : 1;
-  int insert_latency_markers : 1;
 } ev_src_init_flags;
 
 /*!
@@ -66,12 +65,17 @@ typedef struct {
  *
  * @var uds_sock_path
  * Path of the UDS. Can be set to NULL if online monitoring is not used.
+ *
+ * @var latency_tracking_path
+ * Path of the output file for latency measurements. Can be set to NULL is
+ * latency tracking is not used.
  */
 typedef struct {
   ev_src_init_flags flags;
   size_t wbuf_size;
   char *log_path;
   char *uds_sock_path;
+  char *latency_tracking_path;
 } ev_src_init_opts;
 
 /*!
