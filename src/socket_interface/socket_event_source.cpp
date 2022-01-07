@@ -107,7 +107,7 @@ const char *event_source::get_error() const {
 
 void event_source::handle_latency_marker(absl::Duration d) {
   auto now = absl::ToUnixMicros(absl::Now());
-  fmt::print("{},{}\n", now, absl::ToInt64Microseconds(d));
+  lat_out_->print("{},{}\n", now, absl::ToInt64Microseconds(d));
 }
 
 event_source::event_source(bool log_to_file, bool log_to_stdout,

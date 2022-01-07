@@ -1,4 +1,5 @@
 #include "uds_monitor_driver.h"
+#include <cstdio>
 
 uds_monitor_driver::uds_monitor_driver(
   const std::filesystem::path &formula_path,
@@ -14,10 +15,11 @@ void uds_monitor_driver::do_monitor() {
   while (true) {
     ipc::serialization::ts_database tdb;
     int64_t wm;
+    // fmt::print(stderr, "waiting for new input\n");
     int ret_code = deser_.read_database(tdb, wm);
     if (ret_code == 0) {
+      // fmt::print(stderr, "read eof\n");
       if (saved_wm_ != -1) {
-        // fmt::print("sending back watermark {}\n", saved_wm_);
         deser_.send_latency_marker(saved_wm_);
         saved_wm_ = -1;
       }
@@ -26,8 +28,8 @@ void uds_monitor_driver::do_monitor() {
       deser_.send_eof();
       return;
     } else if (ret_code == 1) {
+      // fmt::print(stderr, "read new db\n");
       if (saved_wm_ != -1) {
-        // fmt::print("sending back watermark {}\n", saved_wm_);
         deser_.send_latency_marker(saved_wm_);
         saved_wm_ = -1;
       }
@@ -35,7 +37,7 @@ void uds_monitor_driver::do_monitor() {
       auto sats = monitor_.step(db, ts);
       printer_.print_verdict(sats);
     } else {
-      // fmt::print("received new watermark {}\n", saved_wm_);
+      // fmt::print(stderr, "read lat marker\n");
       if (saved_wm_ != -1)
         throw std::runtime_error("2 watermarks without data\n");
       saved_wm_ = wm;

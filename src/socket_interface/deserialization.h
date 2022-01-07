@@ -45,8 +45,7 @@ private:
   void send_primitive(T t) {
     char snd_buf[sizeof(T)];
     std::memcpy(snd_buf, &t, sizeof(T));
-    boost::asio::write(sock_.next_layer(),
-                       boost::asio::const_buffer(snd_buf, sizeof(T)));
+    boost::asio::write(sock_, boost::asio::const_buffer(snd_buf, sizeof(T)));
   }
 
   std::string read_string();

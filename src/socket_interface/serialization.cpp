@@ -48,6 +48,9 @@ serializer::submit_type serializer::st_from_ptr(void *ty) {
 }
 
 void serializer::submit_shutdown_write_sock() {
+  assert(wbufs_.empty() && wbufs_views_.empty() && dat_q_.empty() &&
+         !write_pending_);
+  // fmt::print(stderr, "submitting shutdown write\n");
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
   if (!sqe)
     throw std::runtime_error("liburing submission queue is full!");
@@ -98,7 +101,6 @@ void serializer::maybe_submit_cppmon_write() {
   size_t num_vecs = std::min(wbufs_views_.size(), 1024UL);
   assert(!wbufs_.empty());
   assert(wbufs_.size() == wbufs_views_.size());
-  write_pending_ = true;
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
   if (!sqe)
     throw std::runtime_error("liburing submission queue is full");
@@ -106,9 +108,11 @@ void serializer::maybe_submit_cppmon_write() {
                        static_cast<unsigned int>(num_vecs), 0);
   io_uring_sqe_set_data(sqe, st_to_ptr(DATA_WRITE));
   io_uring_submit(&ring);
+  write_pending_ = true;
 }
 
 void serializer::handle_write_done(size_t nbytes) {
+  assert(wbufs_.size() == wbufs_views_.size());
   write_pending_ = false;
   size_t out_written = 0;
   for (size_t prefix_sum = 0; !wbufs_.empty();
@@ -130,6 +134,8 @@ void serializer::handle_write_done(size_t nbytes) {
       out_written++;
     }
   }
+  if (got_finished_event_)
+    read_chunks_from_queue(dat_q_.size());
   maybe_submit_cppmon_write();
 }
 
@@ -150,8 +156,11 @@ bool serializer::maybe_read_more(size_t full_size) {
 }
 
 void serializer::handle_read_done(size_t nbytes) {
-  if (!nbytes)
+  if (!nbytes) {
+    // fmt::print(stderr, "unexpected eof, waiting for lm? {}\n",
+    // waiting_for_lm_);
     throw std::runtime_error("unexpected eof");
+  }
   curr_read_bytes_ += nbytes;
   if (waiting_for_lm_) {
     assert(curr_read_bytes_ <= sizeof(int64_t));
@@ -176,6 +185,7 @@ void serializer::handle_read_done(size_t nbytes) {
         submit_cppmon_read(sizeof(int64_t));
         break;
       case CTRL_EOF:
+        // fmt::print(stderr, "got eof command\n");
         done_confirmed_ = true;
         break;
       default:
@@ -204,41 +214,43 @@ void serializer::handle_finished_eventfd() {
 }
 
 void serializer::run_io_event_loop() {
-  // try {
-  submit_eventfd_read(&ev_done_, ev_done_fd_);
-  submit_eventfd_read(&new_dat_, new_dat_fd_);
-  submit_cppmon_read(sizeof(control_bits));
-  size_t it_num = 0;
-  auto fn1 = [this, &it_num](int res, void *data) {
-    submit_type user_dat = st_from_ptr(data);
-    it_num++;
-    switch (user_dat) {
-      case FINISHED_EVENT:
-        handle_finished_eventfd();
-        return true;
-      case NEW_DATA_EVENT:
-        handle_new_data_eventfd();
-        return true;
-      case DATA_WRITE:
-        assert(res > 0);
-        handle_write_done(static_cast<size_t>(res));
-        return true;
-      case DATA_READ:
-        handle_read_done(static_cast<size_t>(res));
-        if (got_finished_event_ && done_confirmed_)
-          return false;
-        else
+  try {
+    submit_eventfd_read(&ev_done_, ev_done_fd_);
+    submit_eventfd_read(&new_dat_, new_dat_fd_);
+    submit_cppmon_read(sizeof(control_bits));
+    size_t it_num = 0;
+    auto fn1 = [this, &it_num](int res, void *data) {
+      submit_type user_dat = st_from_ptr(data);
+      it_num++;
+      switch (user_dat) {
+        case FINISHED_EVENT:
+          handle_finished_eventfd();
           return true;
-      case SHUTDOWN_WRITE:
-        return true;
-    }
-  };
-  throw_on_err(for_each_ring_event<decltype(fn1)>,
-               "error processing uring events", fn1, &ring);
-  /* } catch (const std::exception &e) {
+        case NEW_DATA_EVENT:
+          handle_new_data_eventfd();
+          return true;
+        case DATA_WRITE:
+          assert(res > 0);
+          handle_write_done(static_cast<size_t>(res));
+          return true;
+        case DATA_READ:
+          handle_read_done(static_cast<size_t>(res));
+          if (got_finished_event_ && done_confirmed_) {
+            // fmt::print(stderr, "everything is confirmed\n");
+            return false;
+          } else
+            return true;
+        case SHUTDOWN_WRITE:
+          // fmt::print(stderr, "got shutdown confirmation\n");
+          return true;
+      }
+    };
+    throw_on_err(for_each_ring_event<decltype(fn1)>,
+                 "error processing uring events", fn1, &ring);
+  } catch (const std::exception &e) {
     fmt::print(stderr, "exception occured: {}\n", e.what());
-    throw;
-  } */
+    std::abort();
+  }
 }
 
 void serializer::chunk_raw_data(const char *data, size_t len) {
