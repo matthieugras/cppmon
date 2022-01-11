@@ -7,6 +7,7 @@
 #include <boost/asio/buffered_read_stream.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/system/error_code.hpp>
 #include <c_event_types.h>
 #include <cstring>
@@ -20,18 +21,17 @@
 namespace ipc::serialization {
 using database = absl::flat_hash_map<std::pair<std::string, size_t>,
                                      std::vector<parse::database_elem>>;
+using ts_database = std::pair<database, std::vector<size_t>>;
 
 class deserializer {
 public:
   deserializer(const std::string &socket_path);
-  std::optional<std::pair<database, std::vector<size_t>>> read_database();
+  int read_database(ts_database &opt_db, int64_t &wm);
+  void send_latency_marker(int64_t wm);
+  void send_eof();
   ~deserializer();
 
 private:
-  std::string read_string();
-  common::event_data read_event_data();
-  void read_tuple(database &db);
-  void read_tuple_list(database &db);
   template<typename T>
   T read_primitive() {
     T t{};
@@ -40,6 +40,18 @@ private:
     std::memcpy(&t, buf.data(), sizeof(T));
     return t;
   }
+
+  template<typename T>
+  void send_primitive(T t) {
+    char snd_buf[sizeof(T)];
+    std::memcpy(snd_buf, &t, sizeof(T));
+    boost::asio::write(sock_, boost::asio::const_buffer(snd_buf, sizeof(T)));
+  }
+
+  std::string read_string();
+  common::event_data read_event_data();
+  void read_tuple(database &db);
+  void read_tuple_list(database &db);
 
   std::string path_;
   boost::asio::io_context ctx_;

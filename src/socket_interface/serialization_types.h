@@ -3,10 +3,11 @@
 namespace ipc::serialization {
 enum control_bits
 {
-  CTRL_NEW_EVENT,
-  CTRL_NEW_DATABASE,
-  CTRL_END_DATABASE,
-  CTRL_TERMINATED
+  CTRL_NEW_EVENT = 0x1,
+  CTRL_NEW_DATABASE = 0x2,
+  CTRL_END_DATABASE = 0x3,
+  CTRL_LATENCY_MARKER = 0x4,
+  CTRL_EOF = 0x5
 };
 }// namespace ipc::serialization
 

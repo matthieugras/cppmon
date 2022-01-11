@@ -43,17 +43,11 @@ typedef union {
  * @var online_monitoring
  * Enable online monitoring support over UDS. Must be combined with either file
  * or stdout logging
- *
- * @var unbounded_buf
- * Use an unbounded buffer to avoid blocking. This is slower than the blocking
- * version because of synchronization overhead. Unused if online_monitoring is
- * set to false.
  */
 typedef struct {
   int log_to_file : 1;
   int log_to_stdout : 1;
   int online_monitoring : 1;
-  int unbounded_buf : 1;
 } ev_src_init_flags;
 
 /*!
@@ -64,21 +58,24 @@ typedef struct {
  * Flags as specified above.
  *
  * @var wbuf_size
- * Number of bytes that are buffered before writing to the UDS. If
- * unbounded_buf is set to false, exactly wbuf_size bytes are buffered.
- * Otherwise at least wbuf_size are buffered.
+ * Number of databases that are (fully) buffered
  *
  * @var log_path
  * Path for the output trace. Can be set to NULL if file logging is not used.
  *
  * @var uds_sock_path
  * Path of the UDS. Can be set to NULL if online monitoring is not used.
+ *
+ * @var latency_tracking_path
+ * Path of the output file for latency measurements. Can be set to NULL is
+ * latency tracking is not used.
  */
 typedef struct {
   ev_src_init_flags flags;
   size_t wbuf_size;
   char *log_path;
   char *uds_sock_path;
+  char *latency_tracking_path;
 } ev_src_init_opts;
 
 /*!

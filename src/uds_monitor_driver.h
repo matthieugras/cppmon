@@ -16,13 +16,16 @@ class uds_monitor_driver : public monitor_driver {
 public:
   uds_monitor_driver(const std::filesystem::path &formula_path,
                      const std::filesystem::path &sig_path,
-                     const std::string &socket_path);
+                     const std::string &socket_path,
+                     std::optional<std::string> verdict_path);
   void do_monitor() override;
 
 private:
+  verdict_printer printer_;
   monitor::monitor monitor_;
   parse::signature sig_;
   ipc::serialization::deserializer deser_;
+  int64_t saved_wm_;
 };
 
 

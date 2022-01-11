@@ -16,9 +16,9 @@ ABSL_FLAG(bool, dump_heap, false, "create a heap dump before terminating");
 
 file_monitor_driver::file_monitor_driver(
   const std::filesystem::path &formula_path,
-  const std::filesystem::path &sig_path,
-  const std::filesystem::path &log_path) {
-  namespace fs = std::filesystem;
+  const std::filesystem::path &sig_path, const std::filesystem::path &log_path,
+  std::optional<std::string> verdict_path)
+    : printer_(std::move(verdict_path)) {
   using parse::signature;
   using parse::signature_parser;
   using parse::trace_parser;
@@ -44,12 +44,12 @@ void file_monitor_driver::do_monitor() {
     auto [ts, db] = parser_.parse_database(db_str);
     auto mon_db = monitor::monitor_db_from_parser_db(std::move(db));
     auto sats = monitor_.step(mon_db, make_vector(ts));
-    print_satisfactions(sats);
+    printer_.print_verdict(sats);
   }
 #ifdef USE_JEMALLOC
   if (absl::GetFlag(FLAGS_dump_heap))
     mallctl("prof.dump", NULL, NULL, NULL, 0);
 #endif
   auto sats_last = monitor_.last_step();
-  print_satisfactions(sats_last);
+  printer_.print_verdict(sats_last);
 }

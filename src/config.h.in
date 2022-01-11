@@ -1,1 +1,2 @@
 #cmakedefine USE_JEMALLOC
+#cmakedefine ENABLE_SOCK_INTF
