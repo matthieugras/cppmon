@@ -54,6 +54,15 @@ int for_each_ring_event(F f, io_uring *ring) {
   return 0;
 }
 
+template<typename... Args>
+void log_to_stderr(fmt::format_string<Args...> fmt, Args &&...args) {
+#ifndef NDEBUG
+  auto t_now = absl::FormatTime(absl::Now(), absl::LocalTimeZone());
+  auto msg = fmt::format(fmt, std::forward<Args>(args)...);
+  fmt::print(stderr, "At time {}. {}\n", t_now, msg);
+#endif
+}
+
 class serializer {
 public:
   // Functions called from main thread
@@ -72,8 +81,7 @@ private:
   // Helper functions functions called from main thread
   void chunk_raw_data(const char *data, size_t len);
   void run_io_event_loop();
-  void write_chunk_to_queue();
-  void shutdown_reader();
+  void write_chunk_to_queue(bool is_last = false);
   template<typename T>
   void chunk_primitive(T val) {
     char val_as_bytes[sizeof(T)];
@@ -85,10 +93,9 @@ private:
   enum submit_type
   {
     NEW_DATA_EVENT = 0x1,
-    FINISHED_EVENT = 0x2,
-    DATA_WRITE = 0x3,
-    DATA_READ = 0x4,
-    SHUTDOWN_WRITE = 0x5
+    DATA_WRITE,
+    DATA_READ,
+    SHUTDOWN_WRITE
   };
   static void *st_to_ptr(submit_type ty);
   static submit_type st_from_ptr(void *ty);
@@ -101,16 +108,19 @@ private:
   void handle_read_done(size_t nbytes);
   void handle_write_done(size_t nbytes);
   void handle_new_data_eventfd();
-  void handle_finished_eventfd();
 
   // Shared between threads
-  rigtorp::SPSCQueue<std::vector<char>> dat_q_;
-  int ev_done_fd_ = -1;
+  struct q_elem {
+    bool is_last;
+    std::vector<char> data;
+  };
+  rigtorp::SPSCQueue<q_elem> dat_q_;
   int new_dat_fd_ = -1;
 
   // Owned by IO thread
   std::array<char, 50> rbuf_;
   size_t curr_read_bytes_ = 0;
+  size_t new_event_sum_ = 0;
   std::list<std::vector<char>> wbufs_;
   boost::container::devector<iovec> wbufs_views_;
   size_t min_buf_size_;
@@ -118,9 +128,8 @@ private:
   bool waiting_for_lm_ = false;
   bool done_confirmed_ = false;
   bool write_pending_ = false;
-  bool got_finished_event_ = false;
+  bool no_more_data_ = false;
   int sock_fd_ = -1;
-  eventfd_t ev_done_;
   eventfd_t new_dat_;
   latency_cb_t cb_;
 

@@ -25,7 +25,9 @@ void uds_monitor_driver::do_monitor() {
       }
       auto sats = monitor_.last_step();
       printer_.print_verdict(sats);
+      // fmt::print(stderr, "sending eof\n");
       deser_.send_eof();
+      // fmt::print(stderr, "now returning\n");
       return;
     } else if (ret_code == 1) {
       // fmt::print(stderr, "read new db\n");

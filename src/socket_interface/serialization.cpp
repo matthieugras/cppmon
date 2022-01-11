@@ -16,7 +16,6 @@ serializer::serializer(const std::string &socket_path, size_t wbuf_size,
                        latency_cb_t cb)
     : dat_q_(10000), min_buf_size_(std::min(1024UL, wbuf_size)),
       cb_(std::move(cb)) {
-  ev_done_fd_ = throw_on_err(eventfd, "failed to create fd", 0u, 0);
   new_dat_fd_ = throw_on_err(eventfd, "failed to create fd", 0u, 0);
   sock_fd_ =
     throw_on_err(socket, "failed to create socket", AF_UNIX, SOCK_STREAM, 0);
@@ -33,7 +32,6 @@ serializer::serializer(const std::string &socket_path, size_t wbuf_size,
 }
 
 serializer::~serializer() noexcept {
-  close(ev_done_fd_);
   close(new_dat_fd_);
   close(sock_fd_);
   io_uring_queue_exit(&ring);
@@ -49,8 +47,8 @@ serializer::submit_type serializer::st_from_ptr(void *ty) {
 
 void serializer::submit_shutdown_write_sock() {
   assert(wbufs_.empty() && wbufs_views_.empty() && dat_q_.empty() &&
-         !write_pending_);
-  // fmt::print(stderr, "submitting shutdown write\n");
+         !write_pending_ && no_more_data_);
+  log_to_stderr("submitting shutdown write");
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
   if (!sqe)
     throw std::runtime_error("liburing submission queue is full!");
@@ -63,11 +61,9 @@ void serializer::submit_eventfd_read(eventfd_t *buf, int fd) {
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
   if (!sqe)
     throw std::runtime_error("liburing submission queue is full!");
-  assert(ev_done_fd_ >= 0 && new_dat_fd_ >= 0);
+  assert(new_dat_fd_ >= 0);
   submit_type user_dat;
-  if (fd == ev_done_fd_) {
-    user_dat = FINISHED_EVENT;
-  } else if (fd == new_dat_fd_) {
+  if (fd == new_dat_fd_) {
     user_dat = NEW_DATA_EVENT;
   } else {
     throw std::runtime_error("unknown fd");
@@ -90,15 +86,17 @@ void serializer::submit_cppmon_read(size_t nbytes, size_t offset) {
 
 void serializer::maybe_submit_cppmon_write() {
   assert(!write_pending_);
-  if (!got_finished_event_ && wbufs_.size() < min_buf_size_) {
-    submit_eventfd_read(&new_dat_, new_dat_fd_);
-    return;
-  }
-  if (got_finished_event_ && wbufs_.empty()) {
+  read_chunks_from_queue(new_event_sum_);
+  new_event_sum_ = 0;
+  if (no_more_data_ && wbufs_.empty()) {
     submit_shutdown_write_sock();
     return;
   }
   size_t num_vecs = std::min(wbufs_views_.size(), 1024UL);
+  if (!no_more_data_ && num_vecs < min_buf_size_) {
+    submit_eventfd_read(&new_dat_, new_dat_fd_);
+    return;
+  }
   assert(!wbufs_.empty());
   assert(wbufs_.size() == wbufs_views_.size());
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
@@ -112,7 +110,7 @@ void serializer::maybe_submit_cppmon_write() {
 }
 
 void serializer::handle_write_done(size_t nbytes) {
-  assert(wbufs_.size() == wbufs_views_.size());
+  assert(wbufs_.size() == wbufs_views_.size() && write_pending_);
   write_pending_ = false;
   size_t out_written = 0;
   for (size_t prefix_sum = 0; !wbufs_.empty();
@@ -134,16 +132,14 @@ void serializer::handle_write_done(size_t nbytes) {
       out_written++;
     }
   }
-  if (got_finished_event_)
-    read_chunks_from_queue(dat_q_.size());
   maybe_submit_cppmon_write();
 }
 
 void serializer::handle_new_data_eventfd() {
-  if (got_finished_event_)
-    return;
-  read_chunks_from_queue(new_dat_);
-  maybe_submit_cppmon_write();
+  assert(!no_more_data_);
+  new_event_sum_ += new_dat_;
+  if (!write_pending_)
+    maybe_submit_cppmon_write();
 }
 
 bool serializer::maybe_read_more(size_t full_size) {
@@ -157,8 +153,7 @@ bool serializer::maybe_read_more(size_t full_size) {
 
 void serializer::handle_read_done(size_t nbytes) {
   if (!nbytes) {
-    // fmt::print(stderr, "unexpected eof, waiting for lm? {}\n",
-    // waiting_for_lm_);
+    log_to_stderr("unexpected eof, waiting for lm? {}", waiting_for_lm_);
     throw std::runtime_error("unexpected eof");
   }
   curr_read_bytes_ += nbytes;
@@ -185,7 +180,7 @@ void serializer::handle_read_done(size_t nbytes) {
         submit_cppmon_read(sizeof(int64_t));
         break;
       case CTRL_EOF:
-        // fmt::print(stderr, "got eof command\n");
+        log_to_stderr("got eof confirmation ctrl");
         done_confirmed_ = true;
         break;
       default:
@@ -197,25 +192,18 @@ void serializer::handle_read_done(size_t nbytes) {
 void serializer::read_chunks_from_queue(size_t nchunks) {
   for (size_t left = nchunks; left > 0; --left, dat_q_.pop()) {
     assert(!dat_q_.empty());
-    auto &placed_elem = wbufs_.emplace_back(std::move(*dat_q_.front()));
+    if (dat_q_.front()->is_last) {
+      no_more_data_ = true;
+      assert(dat_q_.size() == 1);
+    }
+    auto &placed_elem = wbufs_.emplace_back(std::move(dat_q_.front()->data));
     wbufs_views_.push_back(
       iovec{.iov_base = placed_elem.data(), .iov_len = placed_elem.size()});
   }
 }
 
-void serializer::handle_finished_eventfd() {
-  if (got_finished_event_)
-    return;
-  got_finished_event_ = true;
-  if (!write_pending_) {
-    read_chunks_from_queue(dat_q_.size());
-    maybe_submit_cppmon_write();
-  }
-}
-
 void serializer::run_io_event_loop() {
   try {
-    submit_eventfd_read(&ev_done_, ev_done_fd_);
     submit_eventfd_read(&new_dat_, new_dat_fd_);
     submit_cppmon_read(sizeof(control_bits));
     size_t it_num = 0;
@@ -223,9 +211,6 @@ void serializer::run_io_event_loop() {
       submit_type user_dat = st_from_ptr(data);
       it_num++;
       switch (user_dat) {
-        case FINISHED_EVENT:
-          handle_finished_eventfd();
-          return true;
         case NEW_DATA_EVENT:
           handle_new_data_eventfd();
           return true;
@@ -235,20 +220,23 @@ void serializer::run_io_event_loop() {
           return true;
         case DATA_READ:
           handle_read_done(static_cast<size_t>(res));
-          if (got_finished_event_ && done_confirmed_) {
-            // fmt::print(stderr, "everything is confirmed\n");
+          assert(!done_confirmed_ || no_more_data_);
+          if (done_confirmed_) {
+            assert(dat_q_.empty() && !new_event_sum_);
+            log_to_stderr("everything is confirmed");
             return false;
-          } else
+          } else {
             return true;
+          }
         case SHUTDOWN_WRITE:
-          // fmt::print(stderr, "got shutdown confirmation\n");
+          log_to_stderr("got shutdown confirmation");
           return true;
       }
     };
     throw_on_err(for_each_ring_event<decltype(fn1)>,
                  "error processing uring events", fn1, &ring);
   } catch (const std::exception &e) {
-    fmt::print(stderr, "exception occured: {}\n", e.what());
+    log_to_stderr("exception occured: {}", e.what());
     std::abort();
   }
 }
@@ -257,17 +245,13 @@ void serializer::chunk_raw_data(const char *data, size_t len) {
   chunk_buf_.insert(chunk_buf_.end(), data, data + len);
 }
 
-void serializer::write_chunk_to_queue() {
-  std::vector<char> swap_dat;
-  swap_dat.reserve(chunk_buf_.size() * 2);
-  swap_dat.swap(chunk_buf_);
-  dat_q_.emplace(std::move(swap_dat));
+void serializer::write_chunk_to_queue(bool is_last) {
+  q_elem elem{};
+  elem.is_last = is_last;
+  elem.data.reserve(chunk_buf_.size() * 2);
+  elem.data.swap(chunk_buf_);
+  dat_q_.emplace(std::move(elem));
   throw_on_err(eventfd_write, "failed to flush buffer", new_dat_fd_, 1u);
-}
-
-void serializer::shutdown_reader() {
-  throw_on_err(eventfd_write, "failed to send shutdown to IO thread",
-               ev_done_fd_, 1u);
 }
 
 void serializer::chunk_latency_marker() {
@@ -316,8 +300,7 @@ void serializer::chunk_begin_db(size_t ts) {
 
 void serializer::chunk_terminate() {
   chunk_primitive(CTRL_EOF);
-  write_chunk_to_queue();
-  shutdown_reader();
+  write_chunk_to_queue(true);
   receiver_->get();
 }
 }// namespace ipc::serialization
