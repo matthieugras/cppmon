@@ -1,9 +1,7 @@
 #ifndef TRACEPARSER_H
 #define TRACEPARSER_H
 
-#include <lexy/dsl/delimited.hpp>
 #define LEXY_IGNORE_DEPRECATED_OPT_LIST 1
-
 #include <absl/container/flat_hash_map.h>
 #include <boost/serialization/strong_typedef.hpp>
 #include <charconv>
@@ -265,9 +263,19 @@ private:
                                  fold_fn);
   };
 
-  struct ts_parse {
-    RULE dsl::integer<size_t>(dsl::digits<>);
-    VALUE lexy::as_integer<size_t>;
+  // TODO: investigate why this produces garbage sometimesb
+  struct ts_parse : lexy::token_production {
+    RULE dsl::capture(dsl::digits<>);
+    VALUE lexy::callback<size_t>([](auto lexeme) -> size_t {
+      const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+      size_t ts;
+      auto [new_ptr, ec] = std::from_chars(fst, lst, ts);
+#ifndef NDEBUG
+      if (ec != std::errc() || new_ptr != lst)
+        throw std::runtime_error("invalid integer");
+#endif
+      return ts;
+    });
   };
 
   struct ts_db_parse {

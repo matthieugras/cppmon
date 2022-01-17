@@ -1,8 +1,6 @@
-ChecksOptions:
+CheckOptions:
   - key: imisc-no-recursion
     value: 0
-  - key: 
-  
   - key: cert-err58-cpp
     value: 0
 

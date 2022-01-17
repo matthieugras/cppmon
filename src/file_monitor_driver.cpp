@@ -1,6 +1,7 @@
 #include <config.h>
 #include <database.h>
 #include <file_monitor_driver.h>
+#include <fmt/core.h>
 #include <monitor.h>
 #include <string>
 #include <traceparser.h>
@@ -41,6 +42,7 @@ void file_monitor_driver::do_monitor() {
   using parse::timestamped_database;
   std::string db_str;
   while (std::getline(log_, db_str)) {
+    // fmt::print("asking to parse string: {}\n", db_str);
     auto [ts, db] = parser_.parse_database(db_str);
     auto mon_db = monitor::monitor_db_from_parser_db(std::move(db));
     auto sats = monitor_.step(mon_db, make_vector(ts));
