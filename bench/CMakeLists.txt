@@ -16,3 +16,7 @@ add_executable(parse_benchmark parse_benchmark.cpp)
 target_include_directories(parse_benchmark PRIVATE ${BENCH_INCLUDES})
 target_link_libraries(parse_benchmark monitor traceparser common
                       CONAN_PKG::benchmark)
+if (USE_JEMALLOC)
+  target_link_libraries(parse_benchmark CONAN_PKG::jemalloc)
+endif()
+install(TARGETS parse_benchmark)

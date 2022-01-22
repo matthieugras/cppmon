@@ -2,6 +2,6 @@ include(FetchContent)
 
 FetchContent_Declare(lexy
     GIT_REPOSITORY https://github.com/foonathan/lexy.git
-    GIT_TAG a59057dbcd4dd87d89cf1a3cc149ce3a7d130ba3)
+    GIT_TAG af01ecd0aa8b774b9de62e6d12b9d69a1060ad20)
 
 FetchContent_MakeAvailable(lexy)

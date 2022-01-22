@@ -11,5 +11,7 @@ int main() {
   while (std::getline(log_file, db_str)) {
     benchmark::DoNotOptimize(db_str);
     benchmark::DoNotOptimize(db_parser.parse_database(db_str));
+    // auto [ts, db] = db_parser.parse_database(db_str);
+    // fmt::print("ts is: {}, db is: {}\n", ts, db);
   }
 }

@@ -1,7 +1,6 @@
 #ifndef TRACEPARSER_H
 #define TRACEPARSER_H
 
-#define LEXY_IGNORE_DEPRECATED_OPT_LIST 1
 #include <absl/container/flat_hash_map.h>
 #include <boost/serialization/strong_typedef.hpp>
 #include <charconv>
@@ -9,6 +8,7 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <iterator>
+#include <lexy/action/scan.hpp>
 #include <lexy/callback.hpp>
 #include <lexy/dsl.hpp>
 #include <optional>
@@ -84,7 +84,9 @@ private:
   struct sig_type_list {
     using res_type = std::vector<arg_types>;
     RULE dsl::parenthesized.opt_list(dsl::p<sig_type>, dsl::sep(dsl::comma));
-    VALUE lexy::as_list<res_type>;
+    VALUE lexy::as_list<res_type> >>
+      lexy::callback<res_type>([](lexy::nullopt = {}) { return res_type{}; },
+                               [](auto &&res) { return std::move(res); });
   };
 
   struct pred_name {
@@ -102,7 +104,7 @@ private:
   struct sig_parse {
     static constexpr auto whitespace = dsl::ascii::blank / dsl::ascii::newline;
 
-    RULE dsl::opt_list(dsl::peek_not(dsl::eof) >> dsl::p<pred_sig>);
+    RULE dsl::opt(dsl::list(dsl::peek_not(dsl::eof) >> dsl::p<pred_sig>));
     static constexpr auto fold_fn = [](signature &sig,
                                        pred_sig::res_type &&psig) {
       if (!sig.insert(std::move(psig)).second)
@@ -110,7 +112,9 @@ private:
     };
 
     VALUE lexy::fold_inplace<signature>(
-      std::initializer_list<signature::init_type>{}, fold_fn);
+      std::initializer_list<signature::init_type>{}, fold_fn) >>
+      lexy::callback<signature>([](lexy::nullopt = {}) { return signature{}; },
+                                [](auto &&l) { return std::move(l); });
   };
 };
 
@@ -122,134 +126,190 @@ public:
 
 private:
   signature sig_;
-  struct number_arg : lexy::token_production {
-    using res_type = var2::variant<std::string_view, std::string>;
-    RULE[] {
-      auto exp_l = dsl::lit_c<'e'> / dsl::lit_c<'E'>;
-      auto allowed_chars = dsl::digit<> / dsl::period / dsl::lit_c<'-'> / exp_l;
-      return dsl::capture(dsl::while_(allowed_chars));
-    }
-    ();
-    VALUE lexy::callback<res_type>([](auto lexeme) {
-      return res_type(var2::in_place_index<0>,
-                      std::string_view(lexeme.data(), lexeme.size()));
-    });
-  };
 
   struct string_arg : lexy::token_production {
-    using res_type = number_arg::res_type;
+    using res_type = std::string;
     RULE dsl::quoted(dsl::code_point - dsl::ascii::control,
-                     dsl::backslash_escape.capture(dsl::lit_c<'"'>));
-    VALUE lexy::as_string<std::string> >>
-      lexy::bind(lexy::construct<res_type>, var2::in_place_index<1>, lexy::_1);
+                     dsl::backslash_escape.capture(dsl::lit_c<'"'> /
+                                                   dsl::lit_c<'\\'>));
+    VALUE lexy::as_string<std::string>;
   };
 
-  struct arg_value : lexy::token_production {
-    using res_type = number_arg::res_type;
-    RULE dsl::peek(dsl::digit<> / dsl::lit_c<'-'>) >> dsl::p<number_arg> |
-      dsl::else_ >> dsl::p<string_arg>;
-    VALUE lexy::forward<res_type>;
+  using arg_tup_ty = std::pair<std::string, database_elem>;
+
+  struct unknown_pred {
+    static constexpr auto name = "unknown predicate";
   };
 
-  struct arg_tuple {
-    using res_type = std::vector<arg_value::res_type>;
-    RULE dsl::parenthesized.opt_list(dsl::p<arg_value>, dsl::sep(dsl::comma));
-    VALUE lexy::as_list<res_type>;
+  struct not_enough_args {
+    static constexpr auto name =
+      "predicate has wrong arity - not enough arguments";
   };
 
-  struct arg_tuple_list {
-    using res_type = std::vector<arg_tuple::res_type>;
-    RULE dsl::list(dsl::peek_not(dsl::ascii::alpha_digit_underscore /
-                                 dsl::semicolon) >>
-                   dsl::p<arg_tuple>);
-    VALUE lexy::as_list<res_type>;
+  struct too_many_args {
+    static constexpr auto name =
+      "predicate has wrong arity - too many arguments";
+  };
+  struct invalid_double {
+    static constexpr auto name = "invalid double value";
+  };
+  struct invalid_integer {
+    static constexpr auto name = "invalid integer value";
   };
 
-  struct named_arg_tup_list {
-    using res_type =
-      std::pair<signature_parser::pred_name::res_type, database_elem>;
-    RULE dsl::p<signature_parser::pred_name> + dsl::p<arg_tuple_list>;
-    static constexpr auto cb = lexy::callback<res_type>(
-      [](std::string &&pred_name, typename arg_tuple_list::res_type &&pred_args,
-         const signature &sig) {
-        auto it = sig.find(pred_name);
-        if (it == sig.cend()) {
-          throw std::runtime_error(
-            fmt::format("unknown predicate {}", pred_name));
-        }
-        database_elem res_set;
-        res_set.reserve(pred_args.size());
-        const auto &tys = it->second;
-        size_t n1 = tys.size();
-        for (auto &tup : pred_args) {
-          size_t n2 = tup.size();
-          if (n1 != n2) {
-            throw std::runtime_error(
-              fmt::format("for predicate {} expected {} arguments, got {}",
-                          pred_name, n1, n2));
+  struct named_arg_tup_list : lexy::scan_production<arg_tup_ty>,
+                              lexy::token_production {
+
+    template<typename Context, typename Reader>
+    static void eat_whitespace(lexy::rule_scanner<Context, Reader> &scanner) {
+      scanner.parse(dsl::whitespace(dsl::ascii::space));
+    }
+
+    template<typename Context, typename Reader>
+    static void parse_event(lexy::rule_scanner<Context, Reader> &scanner,
+                            std::vector<common::event_data> &tup,
+                            arg_types ty) {
+      if (ty == INT_TYPE || ty == FLOAT_TYPE) {
+        auto maybe_lexeme = scanner.capture(
+          dsl::while_(dsl::ascii::digit / dsl::period / dsl::lit_c<'e'> /
+                      dsl::lit_c<'E'> / dsl::lit_c<'-'>));
+        if (!scanner)
+          return;
+        auto lexeme = maybe_lexeme.value();
+        if (ty == INT_TYPE) {
+          const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+          int64_t int_val;
+          auto [new_ptr, ec] = std::from_chars(fst, lst, int_val);
+          if (ec != std::errc() || new_ptr != lst) {
+            scanner.fatal_error(invalid_integer{},
+                                scanner.position() - lexeme.size(),
+                                scanner.position());
+            return;
           }
-          std::vector<common::event_data> res_vec;
-          res_vec.reserve(n1);
-          for (size_t i = 0; i < n1; ++i) {
-            arg_types ty = tys[i];
-            switch (ty) {
-              case INT_TYPE:
-              case FLOAT_TYPE: {
-                const std::string_view *ptr = var2::get_if<0>(&(tup[i]));
-#ifndef NDEBUG
-                if (!ptr)
-                  throw std::runtime_error(
-                    fmt::format("expected float or int, got string"));
-#endif
-                if (ty == INT_TYPE) {
-                  int64_t res{};
-                  const auto *fst = ptr->data(), *lst = fst + ptr->size();
-                  auto [new_ptr, ec] = std::from_chars(fst, lst, res);
-#ifndef NDEBUG
-                  if (ec != std::errc() || new_ptr != lst) {
-                    throw std::runtime_error(
-                      fmt::format("expected int, got input: {}", *ptr));
-                  }
-#endif
-                  res_vec.push_back(common::event_data::Int(res));
-                } else {
-                  double res{};
-                  const auto *fst = ptr->data(), *lst = fst + ptr->size();
-                  auto [new_ptr, ec] = std::from_chars(fst, lst, res);
-#ifndef NDEBUG
-                  if (ec != std::errc() || new_ptr != lst) {
-                    throw std::runtime_error(
-                      fmt::format("expected int, got input: {}", *ptr));
-                  }
-#endif
-                  res_vec.push_back(common::event_data::Float(res));
-                }
-                break;
-              }
-              case STRING_TYPE: {
-                auto *ptr = var2::get_if<1>(&(tup[i]));
-#ifndef NDEBUG
-                if (!ptr)
-                  throw std::runtime_error("expected string, got float or int");
-#endif
-                res_vec.push_back(common::event_data::String(std::move(*ptr)));
-                break;
-              }
-            }
+          tup.emplace_back(common::event_data::Int(int_val));
+        } else {
+          const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+          double double_val;
+          auto [new_ptr, ec] = std::from_chars(fst, lst, double_val);
+          if (ec != std::errc() || new_ptr != lst) {
+            scanner.fatal_error(invalid_double{},
+                                scanner.position() - lexeme.size(),
+                                scanner.position());
+            return;
           }
-          res_set.push_back(std::move(res_vec));
+          tup.emplace_back(common::event_data::Float(double_val));
         }
-        return std::make_pair(std::move(pred_name), std::move(res_set));
-      });
-    VALUE lexy::bind(cb, lexy::_1, lexy::_2, lexy::parse_state);
-  };
+      } else {
+        lexy::scan_result<std::string> string_val;
+        scanner.parse(string_val, dsl::p<string_arg>);
+        if (!scanner)
+          return;
+        tup.emplace_back(common::event_data::String(string_val.value()));
+      }
+    }
 
+    template<typename Context, typename Reader>
+    static void parse_tuple(lexy::rule_scanner<Context, Reader> &scanner,
+                            std::vector<common::event_data> &tup,
+                            const std::vector<arg_types> &tys) {
+      scanner.parse(dsl::lit_c<'('>);
+      if (!scanner)
+        return;
+      eat_whitespace(scanner);
+      if (!scanner)
+        return;
+      if (scanner.branch(dsl::lit_c<')'>)) {
+        if (!tys.empty())
+          scanner.fatal_error(not_enough_args{}, scanner.begin(),
+                              scanner.position());
+        return;
+      }
+
+      auto it = tys.cbegin();
+      do {
+        if (!scanner)
+          return;
+        if (it == tys.cend()) {
+          scanner.fatal_error(too_many_args{}, scanner.begin(),
+                              scanner.position());
+          return;
+        }
+        eat_whitespace(scanner);
+        if (!scanner)
+          return;
+        parse_event(scanner, tup, *it);
+        if (!scanner)
+          return;
+        eat_whitespace(scanner);
+        if (!scanner)
+          return;
+        ++it;
+      } while (scanner.branch(dsl::lit_c<','>));
+      if (it != tys.cend()) {
+        scanner.fatal_error(not_enough_args{}, scanner.begin(),
+                            scanner.position());
+        return;
+      }
+      eat_whitespace(scanner);
+      if (!scanner)
+        return;
+      scanner.parse(dsl::lit_c<')'>);
+    }
+
+    template<typename Context, typename Reader>
+    static scan_result scan(lexy::rule_scanner<Context, Reader> &scanner,
+                            const signature &sig) {
+      eat_whitespace(scanner);
+      if (!scanner)
+        return lexy::scan_failed;
+      lexy::scan_result<std::string> p_name_res;
+      scanner.parse(p_name_res, dsl::p<signature_parser::pred_name>);
+      if (!scanner)
+        return lexy::scan_failed;
+      eat_whitespace(scanner);
+      if (!scanner)
+        return lexy::scan_failed;
+      // TODO: only const
+      std::string p_name(p_name_res.value());
+      auto it = sig.find(p_name);
+      if (it == sig.cend()) {
+        scanner.fatal_error(unknown_pred{}, scanner.begin(),
+                            scanner.position());
+        return lexy::scan_failed;
+      }
+      eat_whitespace(scanner);
+      if (!scanner)
+        return lexy::scan_failed;
+
+      // Parse list of tuples
+      database_elem tup_list;
+      while (scanner.branch(
+        dsl::peek_not(dsl::ascii::alpha_digit_underscore / dsl::semicolon))) {
+        if (!scanner)
+          return lexy::scan_failed;
+        std::vector<common::event_data> tup;
+        tup.reserve(it->second.size());
+        eat_whitespace(scanner);
+        if (!scanner)
+          return lexy::scan_failed;
+        parse_tuple(scanner, tup, it->second);
+        if (!scanner)
+          return lexy::scan_failed;
+        eat_whitespace(scanner);
+        if (!scanner)
+          return lexy::scan_failed;
+        tup_list.emplace_back(std::move(tup));
+      }
+      if (!scanner)
+        return lexy::scan_failed;
+      return std::pair(std::move(p_name), std::move(tup_list));
+    }
+  };
 
   struct db_parse {
     RULE dsl::list(dsl::peek(dsl::ascii::alpha_digit_underscore) >>
                    dsl::p<named_arg_tup_list>);
-    static constexpr auto fold_fn = [](database &db,
-                                       named_arg_tup_list::res_type &&elem) {
+    static constexpr auto fold_fn = [](database &db, arg_tup_ty &&elem) {
       auto it = db.find(elem.first);
       if (it == db.end())
         db.insert(std::move(elem));
@@ -263,17 +323,14 @@ private:
                                  fold_fn);
   };
 
-  // TODO: investigate why this produces garbage sometimesb
   struct ts_parse : lexy::token_production {
     RULE dsl::capture(dsl::digits<>);
     VALUE lexy::callback<size_t>([](auto lexeme) -> size_t {
       const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
       size_t ts;
       auto [new_ptr, ec] = std::from_chars(fst, lst, ts);
-#ifndef NDEBUG
       if (ec != std::errc() || new_ptr != lst)
         throw std::runtime_error("invalid integer");
-#endif
       return ts;
     });
   };
