@@ -2,6 +2,27 @@
 #include <monitor.h>
 
 namespace monitor::detail {
+static parse::database_tuple remove_col(parse::database_tuple &row,
+                                        size_t col_idx) {
+  parse::database_tuple new_row;
+  for (size_t i = 0; i < row.size(); ++i) {
+    if (i == col_idx)
+      continue;
+    new_row.emplace_back(std::move(row[i]));
+  }
+  return new_row;
+}
+
+static vector<size_t> get_sparse_var_2_idx(const table_layout &lay) {
+  size_t res_size =
+    lay.empty() ? 0 : (*std::max_element(lay.cbegin(), lay.cend()) + 1);
+  vector<size_t> var_2_idx(res_size);
+  for (size_t i = 0; i < lay.size(); ++i)
+    var_2_idx[lay[i]] = i;
+  return var_2_idx;
+}
+
+
 // Monitor methods
 monitor::monitor(const Formula &formula) : curr_tp_(0) {
   auto [state_tmp, layout_tmp] = MState::init_mstate(formula);
@@ -50,19 +71,186 @@ satisfactions monitor::last_step() {
 MState::MState(val_type &&state) : state(std::move(state)) {}
 
 event_table_vec MState::eval(database &db, const ts_list &ts) {
-  auto visitor = [&db, ts](auto &&arg) -> event_table_vec {
+  auto visitor = [&db, &ts](auto &&arg) -> event_table_vec {
     using T = std::decay_t<decltype(arg)>;
-    if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MExists, MRel, MAndRel,
-                                   MAndAssign, MAnd, MOr, MNext, MPrev,
-                                   MSince<since_impl>, MSince<since_agg_impl>,
-                                   MOnce<once_impl>, MOnce<once_agg_impl>,
-                                   MUntil, MEventually, MAgg>) {
+    if constexpr (any_type_equal_v<T, MPred, MNeg, MLet, MRel, MFusedUnaryOps,
+                                   MAnd, MOr, MNext, MPrev, MSince<since_impl>,
+                                   MSince<since_agg_impl>, MOnce<once_impl>,
+                                   MOnce<once_agg_impl>, MUntil, MEventually,
+                                   MAgg>) {
       return arg.eval(db, ts);
     } else {
       throw not_implemented_error();
     }
   };
   return var2::visit(visitor, state);
+}
+
+MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
+  const auto &phil = *arg.phil;
+  const auto *phir = arg.phir.get();
+  auto [rec_state, rec_layout] = init_mstate(phil);
+  bool cst_neg = false;
+
+  if (const auto *const neg_ptr = phir->inner_if_neg()) {
+    cst_neg = true;
+    phir = neg_ptr;
+  }
+
+  const fo::Term *t1, *t2;
+  auto cst_type = MFusedUnaryOps::AndRel::CST_EQ;
+  if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&phir->val)) {
+    t1 = &ptr->l;
+    t2 = &ptr->r;
+  } else if (const auto *ptr2 = var2::get_if<fo::Formula::less_t>(&phir->val)) {
+    cst_type = MFusedUnaryOps::AndRel::CST_LESS;
+    t1 = &ptr2->l;
+    t2 = &ptr2->r;
+  } else if (const auto *ptr3 =
+               var2::get_if<fo::Formula::less_eq_t>(&phir->val)) {
+    cst_type = MFusedUnaryOps::AndRel::CST_LESS_EQ;
+    t1 = &ptr3->l;
+    t2 = &ptr3->r;
+  } else {
+    throw std::runtime_error("unknown constraint");
+  }
+  auto var_2_idx = get_sparse_var_2_idx(rec_layout);
+  auto and_rel_node =
+    MFusedUnaryOps::AndRel{std::move(var_2_idx), *t1, *t2, cst_type, cst_neg};
+
+  return combine_fused_state(std::move(and_rel_node), std::move(rec_layout),
+                             std::move(rec_state));
+}
+
+MState::init_pair MState::init_and_safe_assign(const fo::Formula &phil,
+                                               const fo::Formula &phir) {
+  auto [rec_state, rec_layout] = init_mstate(phil);
+  auto fv_l = phil.fvs();
+  if (const auto *eq_ptr = var2::get_if<fo::Formula::eq_t>(&phir.val)) {
+    const Term &l = eq_ptr->l, &r = eq_ptr->r;
+    size_t new_var;
+    const Term *trm_to_eval;
+    if (l.is_var() && r.is_var()) {
+      bool l_not_new_var = is_subset({*l.get_if_var()}, fv_l),
+           r_not_new_var = is_subset({*r.get_if_var()}, fv_l);
+      assert(l_not_new_var ^ r_not_new_var);
+      if (l_not_new_var) {
+        new_var = *r.get_if_var();
+        trm_to_eval = &l;
+      } else {
+        new_var = *l.get_if_var();
+        trm_to_eval = &r;
+      }
+    } else if (l.is_var()) {
+      new_var = *l.get_if_var();
+      trm_to_eval = &r;
+    } else {
+      assert(r.is_var());
+      new_var = *r.get_if_var();
+      trm_to_eval = &l;
+    }
+    auto var_2_idx = get_sparse_var_2_idx(rec_layout);
+    rec_layout.push_back(new_var);
+
+    auto and_ass_node = MFusedUnaryOps::AndAssign{
+      std::move(var_2_idx), *trm_to_eval, rec_layout.size()};
+
+    return combine_fused_state(std::move(and_ass_node), std::move(rec_layout),
+                               std::move(rec_state));
+  } else {
+    throw std::runtime_error("unsupported fragment");
+  }
+}
+
+MState::init_pair MState::init_exists_state(const fo::Formula::exists_t &arg) {
+  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
+  table_layout this_layout;
+  this_layout.reserve(rec_layout.size());
+  const auto it = std::find(rec_layout.cbegin(), rec_layout.cend(), 0);
+  optional<size_t> drop_idx{};
+  if (it != rec_layout.cend()) {
+    drop_idx = static_cast<size_t>(std::distance(rec_layout.cbegin(), it));
+  }
+  for (size_t i = 0; i < rec_layout.size(); ++i) {
+    if (!drop_idx || i != *drop_idx)
+      this_layout.push_back(rec_layout[i] - 1);
+  }
+  MFusedUnaryOps::elem_t ex_node = MFusedUnaryOps::Exists{drop_idx};
+  return combine_fused_state(std::move(ex_node), std::move(this_layout),
+                             std::move(rec_state));
+}
+
+event_table_vec MState::MFusedUnaryOps::eval(database &db, const ts_list &ts) {
+  auto rec_tabs = state->eval(db, ts);
+  event_table_vec res_tabs;
+  for (const auto &tab : rec_tabs) {
+    if (!tab) {
+      res_tabs.emplace_back(std::nullopt);
+    } else {
+      event_table new_tab(nfvs);
+      for (auto &row : *tab) {
+        assert(!un_ops.empty());
+        parse::database_tuple last_res = std::move(row);
+        bool is_empty = false;
+        for (auto &op : un_ops) {
+          auto visitor =
+            [&last_res](auto &&arg) -> std::optional<parse::database_tuple> {
+            return arg.eval(last_res);
+          };
+          auto new_res = var2::visit(visitor, op);
+          if (new_res)
+            last_res = std::move(*new_res);
+          else {
+            is_empty = true;
+            break;
+          }
+        }
+        if (!is_empty)
+          new_tab.add_row(std::move(last_res));
+      }
+      if (new_tab.empty())
+        res_tabs.emplace_back(std::nullopt);
+      else
+        res_tabs.emplace_back(std::move(new_tab));
+    }
+  }
+  return res_tabs;
+}
+
+std::optional<parse::database_tuple>
+MState::MFusedUnaryOps::AndRel::eval(parse::database_tuple &row) {
+  auto l_res = l.eval(var_2_idx, row), r_res = r.eval(var_2_idx, row);
+  bool keep;
+  if (cst_type == CST_EQ)
+    keep = l_res == r_res;
+  else if (cst_type == CST_LESS)
+    keep = l_res < r_res;
+  else {
+    assert(cst_type == CST_LESS_EQ);
+    keep = l_res <= r_res;
+  }
+  if (cst_neg)
+    keep = !keep;
+  if (!keep)
+    return {};
+  else
+    return std::move(row);
+}
+
+std::optional<parse::database_tuple>
+MState::MFusedUnaryOps::AndAssign::eval(parse::database_tuple &row) {
+  auto t_eval = t.eval(var_2_idx, row);
+  row.push_back(std::move(t_eval));
+  return std::move(row);
+}
+
+std::optional<parse::database_tuple>
+MState::MFusedUnaryOps::Exists::eval(parse::database_tuple &row) {
+  if (drop_idx) {
+    return remove_col(row, *drop_idx);
+  } else {
+    return std::move(row);
+  }
 }
 
 MState::init_pair MState::init_eq_state(const fo::Formula::eq_t &arg) {
@@ -96,86 +284,6 @@ MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
     return {MAnd{binary_buffer(), uniq(std::move(l_state)),
                  uniq(std::move(r_state)), info},
             info.result_layout};
-  }
-}
-
-static vector<size_t> get_sparse_var_2_idx(const table_layout &lay) {
-  size_t res_size =
-    lay.empty() ? 0 : (*std::max_element(lay.cbegin(), lay.cend()) + 1);
-  vector<size_t> var_2_idx(res_size);
-  for (size_t i = 0; i < lay.size(); ++i)
-    var_2_idx[lay[i]] = i;
-  return var_2_idx;
-}
-
-MState::init_pair MState::init_and_rel_state(const fo::Formula::and_t &arg) {
-  const auto &phil = *arg.phil;
-  const auto *phir = arg.phir.get();
-  auto [rec_state, rec_layout] = init_mstate(phil);
-  bool cst_neg = false;
-
-  if (const auto *const neg_ptr = phir->inner_if_neg()) {
-    cst_neg = true;
-    phir = neg_ptr;
-  }
-
-  const fo::Term *t1, *t2;
-  auto cst_type = MAndRel::CST_EQ;
-  if (const auto *ptr = var2::get_if<fo::Formula::eq_t>(&phir->val)) {
-    t1 = &ptr->l;
-    t2 = &ptr->r;
-  } else if (const auto *ptr2 = var2::get_if<fo::Formula::less_t>(&phir->val)) {
-    cst_type = MAndRel::CST_LESS;
-    t1 = &ptr2->l;
-    t2 = &ptr2->r;
-  } else if (const auto *ptr3 =
-               var2::get_if<fo::Formula::less_eq_t>(&phir->val)) {
-    cst_type = MAndRel::CST_LESS_EQ;
-    t1 = &ptr3->l;
-    t2 = &ptr3->r;
-  } else {
-    throw std::runtime_error("unknown constraint");
-  }
-  auto var_2_idx = get_sparse_var_2_idx(rec_layout);
-  return {MAndRel{uniq(std::move(rec_state)), std::move(var_2_idx), *t1, *t2,
-                  cst_type, cst_neg},
-          std::move(rec_layout)};
-}
-
-MState::init_pair MState::init_and_safe_assign(const fo::Formula &phil,
-                                               const fo::Formula &phir) {
-  auto [rec_state, rec_layout] = init_mstate(phil);
-  auto fv_l = phil.fvs();
-  if (const auto *eq_ptr = var2::get_if<fo::Formula::eq_t>(&phir.val)) {
-    const Term &l = eq_ptr->l, &r = eq_ptr->r;
-    size_t new_var;
-    const Term *trm_to_eval;
-    if (l.is_var() && r.is_var()) {
-      bool l_not_new_var = is_subset({*l.get_if_var()}, fv_l),
-           r_not_new_var = is_subset({*r.get_if_var()}, fv_l);
-      assert(l_not_new_var ^ r_not_new_var);
-      if (l_not_new_var) {
-        new_var = *r.get_if_var();
-        trm_to_eval = &l;
-      } else {
-        new_var = *l.get_if_var();
-        trm_to_eval = &r;
-      }
-    } else if (l.is_var()) {
-      new_var = *l.get_if_var();
-      trm_to_eval = &r;
-    } else {
-      assert(r.is_var());
-      new_var = *r.get_if_var();
-      trm_to_eval = &l;
-    }
-    auto var_2_idx = get_sparse_var_2_idx(rec_layout);
-    rec_layout.push_back(new_var);
-    return {MAndAssign{uniq(std::move(rec_state)), std::move(var_2_idx),
-                       *trm_to_eval, rec_layout.size()},
-            std::move(rec_layout)};
-  } else {
-    throw std::runtime_error("unsupported fragment");
   }
 }
 
@@ -240,22 +348,6 @@ void MState::MPred::print_state() {
   fmt::print("MPRED STATE \nnfvs: {}, pred_name: {}, var_pos: "
              "{}, pos_2_cst: {}\n",
              nfvs, pred_name, var_pos, pos_2_cst);
-}
-
-MState::init_pair MState::init_exists_state(const fo::Formula::exists_t &arg) {
-  auto [rec_state, rec_layout] = init_mstate(*arg.phi);
-  table_layout this_layout;
-  this_layout.reserve(rec_layout.size());
-  const auto it = std::find(rec_layout.cbegin(), rec_layout.cend(), 0);
-  optional<size_t> drop_idx{};
-  if (it != rec_layout.cend()) {
-    drop_idx = static_cast<size_t>(std::distance(rec_layout.cbegin(), it));
-  }
-  for (size_t i = 0; i < rec_layout.size(); ++i) {
-    if (!drop_idx || i != *drop_idx)
-      this_layout.push_back(rec_layout[i] - 1);
-  }
-  return {MExists{drop_idx, uniq(std::move(rec_state))}, this_layout};
 }
 
 MState::init_pair MState::init_next_state(const fo::Formula::next_t &arg) {
@@ -438,22 +530,11 @@ event_table_vec MState::MNeg::eval(database &db, const ts_list &ts) {
   return res_tabs;
 }
 
-event_table_vec MState::MExists::eval(database &db, const ts_list &ts) {
-  auto rec_tabs = state->eval(db, ts);
-  if (drop_idx)
-    std::for_each(rec_tabs.begin(), rec_tabs.end(), [this](auto &tab) {
-      if (tab)
-        tab->drop_col(*drop_idx);
-    });
-  return rec_tabs;
-}
-
 event_table_vec MState::MOr::eval(database &db, const ts_list &ts) {
   auto reduction_fn = [this](const opt_table &tab1,
                              const opt_table &tab2) -> opt_table {
     if (!tab2)
       return tab1;
-    // TODO: replace 5 by correct number
     auto tab1_tmp = tab1 ? *tab1 : event_table(nfvs_l);
     tab1_tmp.t_union_in_place(*tab2, r_layout_permutation);
     return std::move(tab1_tmp);
@@ -481,60 +562,6 @@ event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
   auto ret = apply_recursive_bin_reduction(reduction_fn, *l_state, *r_state,
                                            buf, db, ts);
   return ret;
-}
-
-event_table_vec MState::MAndRel::eval(database &db, const ts_list &ts) {
-  auto rec_tabs = state->eval(db, ts);
-  event_table_vec res_tabs;
-  res_tabs.reserve(rec_tabs.size());
-  auto filter_fn = [this](const auto &row) {
-    auto l_res = l.eval(var_2_idx, row), r_res = r.eval(var_2_idx, row);
-    bool ret;
-    if (cst_type == CST_EQ)
-      ret = l_res == r_res;
-    else if (cst_type == CST_LESS)
-      ret = l_res < r_res;
-    else {
-      assert(cst_type == CST_LESS_EQ);
-      ret = l_res <= r_res;
-    }
-    if (cst_neg)
-      ret = !ret;
-    return ret;
-  };
-  for (const auto &tab : rec_tabs) {
-    if (tab) {
-      auto new_tab = tab->filter(filter_fn);
-      if (new_tab.empty())
-        res_tabs.emplace_back(std::nullopt);
-      else
-        res_tabs.emplace_back(std::move(new_tab));
-    } else {
-      res_tabs.emplace_back(std::nullopt);
-    }
-  }
-  return res_tabs;
-}
-
-event_table_vec MState::MAndAssign::eval(database &db, const ts_list &ts) {
-  auto rec_tabs = state->eval(db, ts);
-  event_table_vec res_tabs;
-  res_tabs.reserve(rec_tabs.size());
-  for (const auto &tab : rec_tabs) {
-    if (tab) {
-      event_table new_tab(nfvs);
-      for (const auto &row : *tab) {
-        auto row_cp = row;
-        auto trm_eval = t.eval(var_2_idx, row);
-        row_cp.push_back(std::move(trm_eval));
-        new_tab.add_row(std::move(row_cp));
-      }
-      res_tabs.push_back(std::move(new_tab));
-    } else {
-      res_tabs.emplace_back(std::nullopt);
-    }
-  }
-  return res_tabs;
 }
 
 event_table_vec MState::MPrev::eval(database &db, const ts_list &ts) {

@@ -64,21 +64,6 @@ vector<T> filter_row(const vector<size_t> &keep_idxs, const vector<T> &row) {
   return filtered_row;
 }
 
-template<typename F, typename C>
-void for_each_cached(F f, const C &c) {
-  for (auto it = c.cbegin(); it != c.cend(); ++it) {
-    auto nxt_it = it;
-    nxt_it++;
-
-    if (nxt_it != c.cend()) {
-      __builtin_prefetch(nxt_it->data(), 0, 1);
-      __builtin_prefetch(nxt_it->data() + 4, 0, 1);
-    }
-
-    f(*it);
-  }
-}
-
 template<typename T>
 class table {
   // friend struct fmt::formatter<table<T>>;
@@ -198,25 +183,6 @@ public:
     data_.insert(std::move(row));
   }
 
-  void drop_col(size_t idx) {
-    size_t n = ncols_;
-    --ncols_;
-    assert(idx >= 0 && idx < n);
-    data_t tmp_cp = data_;
-    data_.clear();
-    data_.reserve(tmp_cp.size());
-    for (const auto &row : tmp_cp) {
-      vector<T> tmp_vec;
-      tmp_vec.reserve(n - 1);
-      for (size_t i = 0; i < n; ++i) {
-        if (i == idx)
-          continue;
-        tmp_vec.push_back(std::move(row[i]));
-      }
-      data_.insert(std::move(tmp_vec));
-    }
-  }
-
   vector<vector<T>> make_verdicts(const vector<size_t> &permutation) {
     assert(permutation.size() == ncols_);
     vector<vector<T>> verdicts;
@@ -226,14 +192,6 @@ public:
       verdicts.push_back(filter_row(permutation, row));
     }
     return verdicts;
-  }
-
-  template<typename F>
-  table<T> filter(F f) const {
-    table<T> res(ncols_);
-    std::copy_if(data_.cbegin(), data_.cend(),
-                 std::inserter(res.data_, res.data_.end()), f);
-    return res;
   }
 
   table<T> natural_join(const table<T> &tab, const join_info &info) const {

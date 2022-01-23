@@ -1,6 +1,7 @@
 #ifndef CPPMON_BUFFERS_H
 #define CPPMON_BUFFERS_H
 
+#include <algorithm>
 #include <boost/container/devector.hpp>
 #include <iterator>
 #include <type_traits>
@@ -20,6 +21,11 @@ public:
     using R = std::invoke_result_t<decltype(f), std::add_lvalue_reference_t<T>,
                                    std::add_lvalue_reference_t<T>>;
     std::vector<R> res;
+    size_t to_reserve = is_l
+                          ? (std::min(buf.size() + new_l.size(), new_r.size()))
+                          : (std::min(new_l.size(), buf.size() + new_r.size()));
+    res.reserve(to_reserve);
+
     auto it1 = new_l.begin(), eit1 = new_l.end(), it2 = new_r.begin(),
          eit2 = new_r.end();
     if (!is_l) {

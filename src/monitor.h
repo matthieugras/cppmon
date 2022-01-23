@@ -24,7 +24,6 @@
 #include <type_traits>
 #include <until_impl.h>
 #include <util.h>
-#include <variant>
 #include <vector>
 
 namespace monitor {
@@ -79,8 +78,8 @@ namespace detail {
 
     template<typename F, typename T>
     friend event_table_vec
-    apply_recursive_bin_reduction(F, T &, T &, binary_buffer &,
-                                  database &, ts_list const &);
+    apply_recursive_bin_reduction(F, T &, T &, binary_buffer &, database &,
+                                  ts_list const &);
 
     MState() = default;
     MState &operator=(MState &&other) = default;
@@ -111,33 +110,44 @@ namespace detail {
       void print_state();
     };
 
+    struct MFusedUnaryOps {
+      struct AndAssign {
+        vector<size_t> var_2_idx;
+        fo::Term t;
+        size_t nfvs;
+
+        std::optional<parse::database_tuple> eval(parse::database_tuple &row);
+      };
+      struct AndRel {
+        vector<size_t> var_2_idx;
+        fo::Term l, r;
+        enum cst_type_t
+        {
+          CST_EQ,
+          CST_LESS,
+          CST_LESS_EQ
+        } cst_type;
+        bool cst_neg;
+
+        std::optional<parse::database_tuple> eval(parse::database_tuple &row);
+      };
+      struct Exists {
+        optional<size_t> drop_idx;
+
+        std::optional<parse::database_tuple> eval(parse::database_tuple &row);
+      };
+      event_table_vec eval(database &db, const ts_list &ts);
+      using elem_t = var2::variant<AndAssign, AndRel, Exists>;
+
+      ptr_type<MState> state;
+      std::vector<elem_t> un_ops;
+      size_t nfvs;
+    };
+
     struct MAnd {
       binary_buffer buf;
       ptr_type<MState> l_state, r_state;
       variant<join_info, anti_join_info> op_info;
-      event_table_vec eval(database &db, const ts_list &ts);
-    };
-
-
-    struct MAndAssign {
-      ptr_type<MState> state;
-      vector<size_t> var_2_idx;
-      fo::Term t;
-      size_t nfvs;
-      event_table_vec eval(database &db, const ts_list &ts);
-    };
-
-    struct MAndRel {
-      ptr_type<MState> state;
-      vector<size_t> var_2_idx;
-      fo::Term l, r;
-      enum cst_type_t
-      {
-        CST_EQ,
-        CST_LESS,
-        CST_LESS_EQ
-      } cst_type;
-      bool cst_neg;
       event_table_vec eval(database &db, const ts_list &ts);
     };
 
@@ -150,12 +160,6 @@ namespace detail {
     };
 
     struct MNeg {
-      ptr_type<MState> state;
-      event_table_vec eval(database &db, const ts_list &ts);
-    };
-
-    struct MExists {
-      optional<size_t> drop_idx;
       ptr_type<MState> state;
       event_table_vec eval(database &db, const ts_list &ts);
     };
@@ -189,11 +193,12 @@ namespace detail {
       event_table_vec eval(database &db, const ts_list &ts) {
         ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
         auto reduction_fn = [this](opt_table &tab_l,
-                                   opt_table  &tab_r) -> opt_table  {
+                                   opt_table &tab_r) -> opt_table {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
-          //fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l, tab_r, new_ts);
+          // fmt::print("calling impl with tabl: {}, tabr: {}, ts: {}\n", tab_l,
+          // tab_r, new_ts);
           auto ret = impl.eval(tab_l, tab_r, new_ts);
           /*fmt::print("state after call:\n");
           impl.print_state();*/
@@ -220,7 +225,7 @@ namespace detail {
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();
-          //fmt::print("calling impl with tabl: {}, ts: {}\n", tab, new_ts);
+          // fmt::print("calling impl with tabl: {}, ts: {}\n", tab, new_ts);
           auto ret = impl.eval(tab, new_ts);
           /*fmt::print("state after call:\n");
           impl.print_state();*/
@@ -262,16 +267,35 @@ namespace detail {
       event_table_vec eval(database &db, const ts_list &ts);
     };
 
-    using val_type = variant<MRel, MPred, MOr, MExists, MPrev, MNext, MNeg,
-                             MAndRel, MAndAssign, MAnd, MSince<since_agg_impl>,
-                             MSince<since_impl>, MOnce<once_agg_impl>,
-                             MOnce<once_impl>, MUntil, MEventually, MAgg, MLet>;
+    using val_type =
+      variant<MRel, MPred, MOr, MPrev, MNext, MNeg, MAnd, MFusedUnaryOps,
+              MSince<since_agg_impl>, MSince<since_impl>, MOnce<once_agg_impl>,
+              MOnce<once_impl>, MUntil, MEventually, MAgg, MLet>;
     using init_pair = pair<val_type, table_layout>;
 
     explicit MState(val_type &&state);
     template<typename F>
     static inline std::unique_ptr<MState> uniq(F &&arg) {
       return std::unique_ptr<MState>(new MState(std::forward<F>(arg)));
+    }
+
+    template<typename T>
+    static init_pair combine_fused_state(T &&inner_node,
+                                         table_layout &&this_layout,
+                                         val_type &&rec_state) {
+      size_t nfvs = this_layout.size();
+      if (MFusedUnaryOps *ops = var2::get_if<MFusedUnaryOps>(&rec_state)) {
+        ops->un_ops.emplace_back(std::forward<T>(inner_node));
+        // ops->un_ops.insert(ops->un_ops.cbegin(), );
+        ops->nfvs = nfvs;
+        return {std::move(rec_state), std::move(this_layout)};
+      } else {
+        auto fused_node = MFusedUnaryOps{
+          uniq(std::move(rec_state)),
+          make_vector(MFusedUnaryOps::elem_t(std::forward<T>(inner_node))),
+          nfvs};
+        return {std::move(fused_node), std::move(this_layout)};
+      }
     }
 
     static init_pair init_pred_state(const fo::Formula::pred_t &arg);
@@ -297,7 +321,6 @@ namespace detail {
     static init_pair init_agg_state(const fo::Formula::agg_t &arg);
 
     static init_pair init_let_state(const fo::Formula::let_t &arg);
-
 
     struct no_agg {};
 

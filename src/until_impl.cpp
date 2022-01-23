@@ -17,6 +17,7 @@ event_table_vec until_impl_base::eval(size_t new_ts) {
 
 opt_table until_impl_base::table_from_map(const a2_elem_t &mapping) {
   event_table res_tab(nfvs);
+  res_tab.reserve(mapping.size());
   for (const auto &entry : mapping)
     res_tab.add_row(entry.first);
   return res_tab.empty() ? opt_table() : std::move(res_tab);
