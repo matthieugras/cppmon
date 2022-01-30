@@ -93,15 +93,9 @@ namespace detail {
     };
 
     struct MPred {
-      enum pred_ty
-      {
-        TP_PRED,
-        TS_PRED,
-        TPTS_PRED,
-        OTHER_PRED
-      } ty;
       size_t curr_tp, arity, nfvs;
-      name pred_name;
+      bool is_builtin;
+      pred_id_t pred_id;
       vector<Term> pred_args;
       vector<vector<size_t>> var_pos;
       vector<pair<size_t, event_data>> pos_2_cst;
@@ -261,7 +255,7 @@ namespace detail {
 
     struct MLet {
       std::vector<size_t> projection_mask;
-      std::pair<std::string, size_t> db_idx;
+      pred_id_t pred_id;
       ptr_type<MState> phi_state, psi_state;
 
       event_table_vec eval(database &db, const ts_list &ts);

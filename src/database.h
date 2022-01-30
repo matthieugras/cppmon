@@ -8,9 +8,9 @@
 #include <utility>
 
 namespace monitor {
-// map from (pred_name, arity) to lists of lists of events
-using database = absl::flat_hash_map<std::pair<std::string, size_t>,
-                                       std::vector<parse::database_elem>>;
+// map from (pred_id, arity) to lists of lists of events
+using database =
+  absl::flat_hash_map<pred_id_t, std::vector<parse::database_elem>>;
 
 database monitor_db_from_parser_db(parse::database &&db);
 

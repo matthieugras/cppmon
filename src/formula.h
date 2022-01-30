@@ -1,6 +1,7 @@
 #ifndef FORMULA_H
 #define FORMULA_H
 
+#include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <absl/hash/hash.h>
 #include <absl/random/random.h>
@@ -14,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <util.h>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -188,6 +190,8 @@ public:
   static Formula Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
                      event_data default_value, Term agg_term, Formula phi);
   static Formula Let(std::string pred_name, Formula phi, Formula psi);
+  static const pred_map_t &get_known_preds();
+  static pred_id_t add_pred_to_map(std::string pred_name, size_t arity);
   [[nodiscard]] Formula *inner_if_neg() const;
   [[nodiscard]] fv_set fvs() const;
   [[nodiscard]] size_t degree() const;
@@ -199,9 +203,11 @@ public:
 
 private:
   static size_t formula_id_counter;
+  static std::uint32_t pred_id_counter;
+  static pred_map_t known_preds;
 
   struct pred_t {
-    name pred_name;
+    pred_id_t pred_id;
     vector<Term> pred_args;
     bool is_builtin;
   };
@@ -264,7 +270,7 @@ private:
   };
 
   struct let_t {
-    std::string pred_name;
+    pred_id_t pred_id;
     ptr_type<Formula> phi, psi;
   };
 

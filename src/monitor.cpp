@@ -40,6 +40,7 @@ monitor::monitor(const Formula &formula) : curr_tp_(0) {
 }
 
 satisfactions monitor::step(database &db, const ts_list &ts) {
+  // TODO: replace tp_ts_map_ by std::vector
   for (size_t t : ts) {
     tp_ts_map_.emplace(max_tp_, t);
     max_tp_++;
@@ -305,19 +306,6 @@ MState::init_pair MState::init_and_state(const fo::Formula::and_t &arg) {
 
 MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
   size_t n_args = arg.pred_args.size();
-  MPred::pred_ty pred_ty;
-  if (arg.is_builtin) {
-    if (arg.pred_name == "tp" && n_args == 1)
-      pred_ty = MPred::TP_PRED;
-    else if (arg.pred_name == "ts" && n_args == 1)
-      pred_ty = MPred::TS_PRED;
-    else if (arg.pred_name == "tpts" && n_args == 2)
-      pred_ty = MPred::TPTS_PRED;
-    else
-      throw std::runtime_error("unknown builtin predicate");
-  } else {
-    pred_ty = MPred::OTHER_PRED;
-  }
   absl::flat_hash_map<size_t, vector<size_t>> var_2_pred_pos;
   vector<pair<size_t, event_data>> pos_2_cst;
   for (size_t i = 0; i < n_args; ++i) {
@@ -333,11 +321,11 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
     lay.push_back(var);
     var_pos.push_back(pos_idxs);
   }
-  auto mpred_state = MPred{pred_ty,
-                           0,
+  auto mpred_state = MPred{0,
                            arg.pred_args.size(),
                            lay.size(),
-                           arg.pred_name,
+                           arg.is_builtin,
+                           arg.pred_id,
                            arg.pred_args,
                            std::move(var_pos),
                            std::move(pos_2_cst)};
@@ -345,9 +333,10 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
 }
 
 void MState::MPred::print_state() {
-  fmt::print("MPRED STATE \nnfvs: {}, pred_name: {}, var_pos: "
-             "{}, pos_2_cst: {}\n",
-             nfvs, pred_name, var_pos, pos_2_cst);
+  // TODO: fix this later
+  // fmt::print("MPRED STATE \nnfvs: {}, pred_name: {}, var_pos: "
+  //            "{}, pos_2_cst: {}\n",
+  //            nfvs, pred_name, var_pos, pos_2_cst);
 }
 
 MState::init_pair MState::init_next_state(const fo::Formula::next_t &arg) {
@@ -392,9 +381,7 @@ MState::init_pair MState::init_let_state(const fo::Formula::let_t &arg) {
   auto [psi_state, psi_layout] = init_mstate(*arg.psi);
   auto proj_mask =
     find_permutation(id_permutation(phi_layout.size()), phi_layout);
-  return {MLet{std::move(proj_mask),
-               {arg.pred_name, phi_layout.size()},
-               uniq(std::move(phi_state)),
+  return {MLet{std::move(proj_mask), arg.pred_id, uniq(std::move(phi_state)),
                uniq(std::move(psi_state))},
           std::move(psi_layout)};
 }
@@ -472,27 +459,33 @@ event_table_vec MState::MPred::eval(database &db, const ts_list &ts) {
   size_t num_tps = ts.size();
   event_table_vec res_tabs;
   res_tabs.reserve(num_tps);
-  if (ty == TP_PRED) {
-    event_table tab(nfvs);
-    for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
-      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp))),
-            tab);
-    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
-  } else if (ty == TS_PRED) {
-    event_table tab(nfvs);
-    for (size_t curr_ts : ts)
-      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_ts))),
-            tab);
-    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
-  } else if (ty == TPTS_PRED) {
-    event_table tab(nfvs);
-    for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
-      match(make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp)),
-                        common::event_data::Int(static_cast<int64_t>(ts[i]))),
-            tab);
-    res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
+  if (is_builtin) {
+    if (pred_id == TP_PRED) {
+      event_table tab(nfvs);
+      for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
+        match(
+          make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp))),
+          tab);
+      res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
+    } else if (pred_id == TS_PRED) {
+      event_table tab(nfvs);
+      for (size_t curr_ts : ts)
+        match(
+          make_vector(common::event_data::Int(static_cast<int64_t>(curr_ts))),
+          tab);
+      res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
+    } else {
+      assert(pred_id == TP_TS_PRED);
+      event_table tab(nfvs);
+      for (size_t i = 0; i < num_tps; ++i, ++curr_tp)
+        match(
+          make_vector(common::event_data::Int(static_cast<int64_t>(curr_tp)),
+                      common::event_data::Int(static_cast<int64_t>(ts[i]))),
+          tab);
+      res_tabs.push_back(tab.empty() ? opt_table() : std::move(tab));
+    }
   } else {
-    const auto it = db.find(std::pair(pred_name, arity));
+    const auto it = db.find(pred_id);
     if (it == db.end()) {
       res_tabs.emplace_back(std::nullopt);
       return res_tabs;
@@ -682,7 +675,7 @@ event_table_vec MState::MLet::eval(database &db, const ts_list &ts) {
 
   // TODO: maybe it is better not to do a hard fork and rollback changes instead
   std::optional<database::mapped_type> old_db_ent;
-  auto matching_idx = db.find(db_idx);
+  auto matching_idx = db.find(pred_id);
   if (matching_idx != db.end()) {
     old_db_ent.emplace(std::move(matching_idx->second));
     db.erase(matching_idx);
@@ -700,11 +693,11 @@ event_table_vec MState::MLet::eval(database &db, const ts_list &ts) {
     }
     db_ent.push_back(std::move(new_tab));
   }
-  db.emplace(db_idx, std::move(db_ent));
+  db.emplace(pred_id, std::move(db_ent));
   auto res = psi_state->eval(db, ts);
-  db.erase(db_idx);
+  db.erase(pred_id);
   if (old_db_ent)
-    db.emplace(db_idx, std::move(old_db_ent.value()));
+    db.emplace(pred_id, std::move(old_db_ent.value()));
   return res;
 }
 

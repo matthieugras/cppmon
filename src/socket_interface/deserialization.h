@@ -16,17 +16,24 @@
 #include <serialization_types.h>
 #include <string>
 #include <traceparser.h>
+#include <util.h>
 #include <utility>
 
 namespace ipc::serialization {
-using database = absl::flat_hash_map<std::pair<std::string, size_t>,
-                                     std::vector<parse::database_elem>>;
+using database =
+  absl::flat_hash_map<pred_id_t, std::vector<parse::database_elem>>;
 using ts_database = std::pair<database, std::vector<size_t>>;
 
 class deserializer {
 public:
-  deserializer(const std::string &socket_path);
-  int read_database(ts_database &opt_db, int64_t &wm);
+  enum record_type
+  {
+    EOF_RECORD,
+    LATENCY_RECORD,
+    DB_RECORD
+  };
+  deserializer(std::string socket_path, pred_map_t pred_map);
+  record_type read_database(ts_database &opt_db, int64_t &wm);
   void send_latency_marker(int64_t wm);
   void send_eof();
   ~deserializer();
@@ -58,6 +65,7 @@ private:
   boost::asio::local::stream_protocol::acceptor acceptor_;
   boost::asio::buffered_read_stream<boost::asio::local::stream_protocol::socket>
     sock_;
+  pred_map_t pred_map_;
 };
 }// namespace ipc::serialization
 

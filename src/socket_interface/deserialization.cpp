@@ -4,8 +4,9 @@
 #include <util.h>
 
 namespace ipc::serialization {
-deserializer::deserializer(const std::string &socket_path)
-    : path_(socket_path), acceptor_(ctx_), sock_(ctx_, 5000) {
+deserializer::deserializer(std::string socket_path, pred_map_t pred_map)
+    : path_(std::move(socket_path)), acceptor_(ctx_), sock_(ctx_, 5000),
+      pred_map_(std::move(pred_map)) {
   ::unlink(path_.c_str());
   acceptor_.open();
   acceptor_.bind(path_.c_str());
@@ -46,16 +47,24 @@ void deserializer::read_tuple(database &db) {
   // fmt::print("event name is: {}\n", event_name);
   auto arity = read_primitive<size_t>();
   // fmt::print("arity of event is {}\n", arity);
-  parse::database_tuple event;
-  event.reserve(arity);
-  for (size_t i = 0; i < arity; ++i)
-    event.push_back(read_event_data());
-  auto key = std::pair(event_name, arity);
-  auto it = db.find(key);
-  if (it == db.end())
-    db.emplace(key, make_vector(make_vector(std::move(event))));
-  else
-    it->second[0].push_back(std::move(event));
+  auto p_key = std::pair(std::move(event_name), arity);
+  auto p_it = pred_map_.find(p_key);
+  auto pred_id = p_it->second;
+  if (p_it == pred_map_.end()) {
+    // fmt::print("skipping event\n");
+    for (size_t i = 0; i < arity; ++i)
+      read_event_data();
+  } else {
+    parse::database_tuple event;
+    event.reserve(arity);
+    for (size_t i = 0; i < arity; ++i)
+      event.push_back(read_event_data());
+    auto it = db.find(pred_id);
+    if (it == db.end())
+      db.emplace(pred_id, make_vector(make_vector(std::move(event))));
+    else
+      it->second[0].push_back(std::move(event));
+  }
 }
 
 void deserializer::read_tuple_list(database &db) {
@@ -82,23 +91,24 @@ void deserializer::send_eof() {
   sock_.next_layer().shutdown(boost::asio::socket_base::shutdown_send);
 }
 
-int deserializer::read_database(ts_database &ts_db, int64_t &wm) {
+deserializer::record_type deserializer::read_database(ts_database &ts_db,
+                                                      int64_t &wm) {
   auto nxt_ctrl = read_primitive<control_bits>();
   if (nxt_ctrl == CTRL_EOF) {
     // fmt::print("read CMD eof\n");
-    return 0;
+    return EOF_RECORD;
   } else if (nxt_ctrl == CTRL_NEW_DATABASE) {
     // fmt::print("read CMD new db\n");
     auto ts = read_primitive<size_t>();
     // fmt::print("db has ts {}\n", ts);
     read_tuple_list(ts_db.first);
     ts_db.second.push_back(ts);
-    return 1;
+    return DB_RECORD;
   } else if (nxt_ctrl == CTRL_LATENCY_MARKER) {
     // fmt::print("read CMD latency marker\n");
     wm = read_primitive<int64_t>();
     // fmt::print("latency marker is {}\n", wm);
-    return 2;
+    return LATENCY_RECORD;
   } else {
     throw std::runtime_error("expected database");
   }

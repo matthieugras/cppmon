@@ -278,6 +278,8 @@ fv_set Term::fvs() const { return fvi(0); }
 
 // Formula member functions
 size_t Formula::formula_id_counter = 0;
+std::uint32_t Formula::pred_id_counter = USER_PRED;
+pred_map_t Formula::known_preds = pred_map_t{};
 
 size_t Formula::unique_id() const { return formula_id_; }
 
@@ -306,7 +308,7 @@ bool Formula::operator==(const Formula &other) const {
     if constexpr (!std::is_same_v<T1, T2>) {
       return false;
     } else if constexpr (std::is_same_v<T1, pred_t>) {
-      return (arg1.pred_name == arg2.pred_name) &&
+      return (arg1.pred_id == arg2.pred_id) &&
              (arg1.pred_args == arg2.pred_args);
     } else if constexpr (any_type_equal_v<T1, eq_t, less_t, less_eq_t>) {
       return (arg1.l == arg2.l) && (arg1.r == arg2.r);
@@ -325,8 +327,8 @@ bool Formula::operator==(const Formula &other) const {
              (arg1.default_value == arg2.default_value) &&
              (arg1.agg_term == arg2.agg_term) && ((*arg1.phi) == (*arg2.phi));
     } else if constexpr (std::is_same_v<T1, let_t>) {
-      return (arg1.pred_name == arg2.pred_name) &&
-             ((*arg1.phi) == (*arg2.phi)) && ((*arg1.psi) == (*arg2.psi));
+      return (arg1.pred_id == arg2.pred_id) && ((*arg1.phi) == (*arg2.phi)) &&
+             ((*arg1.psi) == (*arg2.psi));
     } else {
       static_assert(always_false_v<T1>, "not exhaustive");
     }
@@ -418,9 +420,33 @@ Formula::Formula(val_type &&val) noexcept
 
 Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 
+const pred_map_t &Formula::get_known_preds() { return known_preds; }
+pred_id_t Formula::add_pred_to_map(std::string pred_name, size_t arity) {
+  std::uint32_t pred_id;
+  auto key = std::pair(std::move(pred_name), arity);
+  if (pred_name == "tp" && arity == 1)
+    pred_id = TP_PRED;
+  else if (pred_name == "ts" && arity == 1)
+    pred_id = TS_PRED;
+  else if (pred_name == "tpts" && arity == 2)
+    pred_id = TP_TS_PRED;
+  else {
+    auto p_it = known_preds.find(key);
+    if (p_it == known_preds.end()) {
+      pred_id = pred_id_counter++;
+    } else {
+      pred_id = p_it->second;
+    }
+  }
+  known_preds.emplace(key, pred_id);
+  return pred_id;
+}
+
 Formula Formula::Pred(name pred_name, vector<Term> pred_args, bool is_builtin) {
-  return Formula(
-    pred_t{std::move(pred_name), std::move(pred_args), is_builtin});
+  size_t n_args = pred_args.size();
+  auto pred_id =
+    Formula::add_pred_to_map(std::move(pred_name), n_args);
+  return Formula(pred_t{pred_id, std::move(pred_args), is_builtin});
 }
 
 Formula Formula::Eq(Term l, Term r) {
@@ -463,8 +489,9 @@ Formula Formula::Agg(agg_type ty, size_t res_var, size_t num_bound_vars,
 }
 
 Formula Formula::Let(std::string pred_name, Formula phi, Formula psi) {
-  return Formula(
-    let_t{std::move(pred_name), uniq(std::move(phi)), uniq(std::move(psi))});
+  size_t arity = phi.fvs().size();
+  auto pred_id = Formula::add_pred_to_map(std::move(pred_name), arity);
+  return Formula(let_t{pred_id, uniq(std::move(phi)), uniq(std::move(psi))});
 }
 
 Formula::val_type Formula::copy_val(const val_type &val) {
@@ -489,7 +516,7 @@ Formula::val_type Formula::copy_val(const val_type &val) {
                arg.agg_term,
                uniq(copy_val(arg.phi->val))};
     } else if constexpr (std::is_same_v<T, let_t>) {
-      return T{arg.pred_name, uniq(copy_val(arg.phi->val)),
+      return T{arg.pred_id, uniq(copy_val(arg.phi->val)),
                uniq(copy_val(arg.psi->val))};
     } else {
       static_assert(always_false_v<T>, "not exhaustive");

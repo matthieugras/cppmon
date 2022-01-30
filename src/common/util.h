@@ -1,15 +1,16 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <absl/container/flat_hash_map.h>
 #include <algorithm>
 #include <boost/hana.hpp>
 #include <filesystem>
+#include <fmt/format.h>
 #include <fstream>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <fmt/format.h>
 
 namespace detail {
 
@@ -70,6 +71,14 @@ auto make_vector(T &&e, Rest &&...rest) {
 }
 
 std::string read_file(const std::filesystem::path &path);
+using pred_id_t = std::uint32_t;
+constexpr pred_id_t TS_PRED = 0;
+constexpr pred_id_t TP_PRED = 1;
+constexpr pred_id_t TP_TS_PRED = 2;
+constexpr pred_id_t USER_PRED = 3;
+// (predicate_name, arity) -> predicate_id
+using pred_map_t =
+  absl::flat_hash_map<std::pair<std::string, size_t>, pred_id_t>;
 
 template<typename T>
 struct [[maybe_unused]] fmt::formatter<std::optional<T>> {

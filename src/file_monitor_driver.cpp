@@ -29,7 +29,7 @@ file_monitor_driver::file_monitor_driver(
   monitor::monitor tmp_mon(formula);
   signature sig = signature_parser::parse(read_file(sig_path));
 
-  trace_parser db_parser(std::move(sig));
+  trace_parser db_parser(std::move(sig), fo::Formula::get_known_preds());
   std::ifstream log_file(log_path);
   log_ = std::move(log_file);
   parser_ = std::move(db_parser);
@@ -39,6 +39,7 @@ file_monitor_driver::file_monitor_driver(
 file_monitor_driver::~file_monitor_driver() noexcept = default;
 
 void file_monitor_driver::do_monitor() {
+  // fmt::print("pred map is: {}\n", fo::Formula::get_known_preds());
   using parse::timestamped_database;
   std::string db_str;
   while (std::getline(log_, db_str)) {
