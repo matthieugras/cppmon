@@ -346,40 +346,40 @@ Formula Formula::from_json(const json &json_formula) {
     std::transform(json_formula.at(2).cbegin(), json_formula.at(2).cend(),
                    std::back_inserter(trm_list),
                    [](const json &j) -> Term { return Term::from_json(j); });
-    return Formula::Pred(std::move(pred_name), std::move(trm_list), false);
+    return Pred(std::move(pred_name), std::move(trm_list), false);
   } else if (fo_ty == "Eq"sv) {
-    return Formula::Eq(Term::from_json(json_formula.at(1)),
-                       Term::from_json(json_formula.at(2)));
+    return Eq(Term::from_json(json_formula.at(1)),
+              Term::from_json(json_formula.at(2)));
   } else if (fo_ty == "Less"sv) {
-    return Formula::Less(Term::from_json(json_formula.at(1)),
-                         Term::from_json(json_formula.at(2)));
+    return Less(Term::from_json(json_formula.at(1)),
+                Term::from_json(json_formula.at(2)));
   } else if (fo_ty == "LessEq"sv) {
-    return Formula::LessEq(Term::from_json(json_formula.at(1)),
-                           Term::from_json(json_formula.at(2)));
+    return LessEq(Term::from_json(json_formula.at(1)),
+                  Term::from_json(json_formula.at(2)));
   } else if (fo_ty == "Neg"sv) {
-    return Formula::Neg(Formula::from_json(json_formula.at(1)));
+    return Neg(Formula::from_json(json_formula.at(1)));
   } else if (fo_ty == "Or"sv) {
-    return Formula::Or(Formula::from_json(json_formula.at(1)),
-                       Formula::from_json(json_formula.at(2)));
+    return Or(Formula::from_json(json_formula.at(1)),
+              Formula::from_json(json_formula.at(2)));
   } else if (fo_ty == "And"sv) {
-    return Formula::And(Formula::from_json(json_formula.at(1)),
-                        Formula::from_json(json_formula.at(2)));
+    return And(Formula::from_json(json_formula.at(1)),
+               Formula::from_json(json_formula.at(2)));
   } else if (fo_ty == "Exists"sv) {
     return Formula::Exists(Formula::from_json(json_formula.at(1)));
   } else if (fo_ty == "Prev"sv) {
-    return Formula::Prev(Interval::from_json(json_formula.at(1)),
-                         Formula::from_json(json_formula.at(2)));
+    return Prev(Interval::from_json(json_formula.at(1)),
+                Formula::from_json(json_formula.at(2)));
   } else if (fo_ty == "Next"sv) {
-    return Formula::Next(Interval::from_json(json_formula.at(1)),
-                         Formula::from_json(json_formula.at(2)));
+    return Next(Interval::from_json(json_formula.at(1)),
+                Formula::from_json(json_formula.at(2)));
   } else if (fo_ty == "Since"sv) {
-    return Formula::Since(Interval::from_json(json_formula.at(2)),
-                          Formula::from_json(json_formula.at(1)),
-                          Formula::from_json(json_formula.at(3)));
+    return Since(Interval::from_json(json_formula.at(2)),
+                 Formula::from_json(json_formula.at(1)),
+                 Formula::from_json(json_formula.at(3)));
   } else if (fo_ty == "Until"sv) {
-    return Formula::Until(Interval::from_json(json_formula.at(2)),
-                          Formula::from_json(json_formula.at(1)),
-                          Formula::from_json(json_formula.at(3)));
+    return Until(Interval::from_json(json_formula.at(2)),
+                 Formula::from_json(json_formula.at(1)),
+                 Formula::from_json(json_formula.at(3)));
   } else if (fo_ty == "Agg"sv) {
     auto res_var = nat_from_json(json_formula.at(1));
     auto ty = agg_type_from_json(json_formula.at(2).at(0));
@@ -423,7 +423,7 @@ Formula::Formula(const val_type &val) : Formula(copy_val(val)) {}
 const pred_map_t &Formula::get_known_preds() { return known_preds; }
 pred_id_t Formula::add_pred_to_map(std::string pred_name, size_t arity) {
   std::uint32_t pred_id;
-  auto key = std::pair(std::move(pred_name), arity);
+  auto key = std::pair(pred_name, arity);
   if (pred_name == "tp" && arity == 1)
     pred_id = TP_PRED;
   else if (pred_name == "ts" && arity == 1)
@@ -444,8 +444,7 @@ pred_id_t Formula::add_pred_to_map(std::string pred_name, size_t arity) {
 
 Formula Formula::Pred(name pred_name, vector<Term> pred_args, bool is_builtin) {
   size_t n_args = pred_args.size();
-  auto pred_id =
-    Formula::add_pred_to_map(std::move(pred_name), n_args);
+  auto pred_id = Formula::add_pred_to_map(std::move(pred_name), n_args);
   return Formula(pred_t{pred_id, std::move(pred_args), is_builtin});
 }
 

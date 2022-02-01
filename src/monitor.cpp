@@ -322,7 +322,6 @@ MState::init_pair MState::init_pred_state(const fo::Formula::pred_t &arg) {
     var_pos.push_back(pos_idxs);
   }
   auto mpred_state = MPred{0,
-                           arg.pred_args.size(),
                            lay.size(),
                            arg.is_builtin,
                            arg.pred_id,

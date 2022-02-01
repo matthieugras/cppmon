@@ -93,7 +93,7 @@ namespace detail {
     };
 
     struct MPred {
-      size_t curr_tp, arity, nfvs;
+      size_t curr_tp, nfvs;
       bool is_builtin;
       pred_id_t pred_id;
       vector<Term> pred_args;

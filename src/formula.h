@@ -174,8 +174,7 @@ public:
   size_t unique_id() const;
   bool operator==(const Formula &other) const;
   explicit Formula(std::string_view json_formula);
-  static Formula Pred(name pred_name, vector<Term> pred_args,
-                      bool is_builtin = false);
+  static Formula Pred(name pred_name, vector<Term> pred_args, bool is_builtin);
   static Formula Eq(Term l, Term r);
   static Formula Less(Term l, Term r);
   static Formula LessEq(Term l, Term r);
