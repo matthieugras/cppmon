@@ -11,6 +11,7 @@
 #include <fmt/ranges.h>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 #include <util.h>
@@ -194,7 +195,8 @@ public:
     return verdicts;
   }
 
-  table<T> natural_join(const table<T> &tab, const join_info &info) const {
+  std::optional<table<T>> natural_join(const table<T> &tab,
+                                       const join_info &info) const {
     auto hash_map = compute_join_hash_map(tab, info.comm_idx2);
     table<T> new_tab(info.result_layout.size());
     for (const auto &row : this->data_) {
@@ -210,10 +212,11 @@ public:
         new_tab.data_.insert(std::move(new_row));
       }
     }
-    return new_tab;
+    return new_tab.empty() ? std::nullopt : std::optional(std::move(new_tab));
   }
 
-  table<T> anti_join(const table<T> &tab, const anti_join_info &info) const {
+  std::optional<table<T>> anti_join(const table<T> &tab,
+                                    const anti_join_info &info) const {
     auto hash_set = compute_join_hash_set(tab, info.comm_idx2);
     table<T> new_tab(info.result_layout.size());
     for (const auto &row : data_) {
@@ -221,7 +224,7 @@ public:
       if (!hash_set.contains(filtered_row))
         new_tab.data_.insert(row);
     }
-    return new_tab;
+    return new_tab.empty() ? std::nullopt : std::optional(std::move(new_tab));
   }
 
 

@@ -14,8 +14,7 @@ namespace ipc::serialization {
 
 serializer::serializer(const std::string &socket_path, size_t wbuf_size,
                        latency_cb_t cb)
-    : dat_q_(10000), min_buf_size_(std::min(1024UL, wbuf_size)),
-      cb_(std::move(cb)) {
+    : min_buf_size_(std::min(1024UL, wbuf_size)), cb_(std::move(cb)) {
   new_dat_fd_ = throw_on_err(eventfd, "failed to create fd", 0u, 0);
   sock_fd_ =
     throw_on_err(socket, "failed to create socket", AF_UNIX, SOCK_STREAM, 0);
@@ -46,8 +45,13 @@ serializer::submit_type serializer::st_from_ptr(void *ty) {
 }
 
 void serializer::submit_shutdown_write_sock() {
-  assert(wbufs_.empty() && wbufs_views_.empty() && dat_q_.empty() &&
-         !write_pending_ && no_more_data_);
+#ifndef NDEBUG
+  {
+    std::scoped_lock lk(mut_);
+    assert(wbufs_.empty() && wbufs_views_.empty() && dat_q_.empty() &&
+           !write_pending_ && no_more_data_);
+  }
+#endif
   log_to_stderr("submitting shutdown write");
   io_uring_sqe *sqe = io_uring_get_sqe(&ring);
   if (!sqe)
@@ -190,13 +194,14 @@ void serializer::handle_read_done(size_t nbytes) {
 }
 
 void serializer::read_chunks_from_queue(size_t nchunks) {
+  std::scoped_lock lk(mut_);
   for (size_t left = nchunks; left > 0; --left, dat_q_.pop()) {
     assert(!dat_q_.empty());
-    if (dat_q_.front()->is_last) {
+    if (dat_q_.front().is_last) {
       no_more_data_ = true;
       assert(dat_q_.size() == 1);
     }
-    auto &placed_elem = wbufs_.emplace_back(std::move(dat_q_.front()->data));
+    auto &placed_elem = wbufs_.emplace_back(std::move(dat_q_.front().data));
     wbufs_views_.push_back(
       iovec{.iov_base = placed_elem.data(), .iov_len = placed_elem.size()});
   }
@@ -222,7 +227,12 @@ void serializer::run_io_event_loop() {
           handle_read_done(static_cast<size_t>(res));
           assert(!done_confirmed_ || no_more_data_);
           if (done_confirmed_) {
-            assert(dat_q_.empty() && !new_event_sum_);
+#ifndef NDEBUG
+            {
+              std::scoped_lock lk(mut_);
+              assert(dat_q_.empty() && !new_event_sum_);
+            }
+#endif
             log_to_stderr("everything is confirmed");
             return false;
           } else {
@@ -250,7 +260,10 @@ void serializer::write_chunk_to_queue(bool is_last) {
   elem.is_last = is_last;
   elem.data.reserve(chunk_buf_.size() * 2);
   elem.data.swap(chunk_buf_);
-  dat_q_.emplace(std::move(elem));
+  {
+    std::scoped_lock lk(mut_);
+    dat_q_.emplace(std::move(elem));
+  }
   throw_on_err(eventfd_write, "failed to flush buffer", new_dat_fd_, 1u);
 }
 
@@ -263,7 +276,7 @@ void serializer::chunk_latency_marker() {
 
 void serializer::chunk_string(const char *str) {
   size_t len = strlen(str);
-  chunk_primitive(len);
+  chunk_primitive(static_cast<int32_t>(len));
   chunk_raw_data(str, len);
 }
 
@@ -283,7 +296,7 @@ void serializer::chunk_event(const char *name, const c_ev_ty *tys,
                              const c_ev_data *data, size_t arity) {
   chunk_primitive(CTRL_NEW_EVENT);
   chunk_string(name);
-  chunk_primitive(arity);
+  chunk_primitive(static_cast<int32_t>(arity));
   for (size_t i = 0; i < arity; ++i)
     chunk_event_data(tys[i], data[i]);
 }
@@ -295,7 +308,7 @@ void serializer::chunk_end_db() {
 
 void serializer::chunk_begin_db(size_t ts) {
   chunk_primitive(CTRL_NEW_DATABASE);
-  chunk_primitive(ts);
+  chunk_primitive(static_cast<int64_t>(ts));
 }
 
 void serializer::chunk_terminate() {

@@ -52,7 +52,7 @@ void differential_test::gen_sig_formula(const fs::path &wdir) {
   const size_t MAX_ITERS = 200;
   for (size_t i = 0;; ++i) {
     // size == 4, free_vars == 5
-    if (bp::system(bp::start_dir(wdir), gen_fma_, "-output", "bla", "-size",
+    if (bp::system(bp::start_dir(wdir), gen_fma_, "-aggr", "-output", "bla", "-size",
                    "3", "-free_vars", "4", "-max_interval", "20",
                    bp::std_out > bp::null,
                    bp::std_err > "gen_fma_stderr") != 0) {

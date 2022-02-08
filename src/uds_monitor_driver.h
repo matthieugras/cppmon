@@ -25,7 +25,6 @@ private:
   monitor::monitor monitor_;
   parse::signature sig_;
   std::optional<ipc::serialization::deserializer> deser_;
-  int64_t saved_wm_;
 };
 
 

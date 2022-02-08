@@ -11,6 +11,60 @@
 
 namespace monitor::detail::agg_temporal {
 
+template<typename Compare>
+class min_max_group {
+public:
+  min_max_group(const common::event_data &first_event) {
+    group_state_.insert(first_event);
+  }
+
+  template<typename H>
+  friend H AbslHashValue(H h, const min_max_group<Compare> &arg) {
+    return H::combine(std::move(h), arg.group_state_);
+  }
+
+  void add_event(const common::event_data &val) { group_state_.insert(val); }
+
+  void remove_event(const common::event_data &val) {
+    auto it = group_state_.find(val);
+    assert(it != group_state_.end());
+    group_state_.erase(it);
+  }
+
+  common::event_data finalize_group() const {
+    assert(!group_state_.empty());
+    return *group_state_.begin();
+  }
+
+private:
+  absl::btree_multiset<common::event_data, Compare> group_state_;
+};
+
+class count_group;
+
+class sum_group : public agg_base::sum_group {
+public:
+  sum_group(const common::event_data &first_event)
+      : agg_base::sum_group(first_event) {}
+
+  void remove_event(const common::event_data &val) { res_ = res_ - val; }
+};
+
+class avg_group : public agg_base::avg_group {
+public:
+  avg_group(const common::event_data &first_value)
+      : agg_base::avg_group(first_value) {}
+
+  void remove_event(const common::event_data &val) {
+    assert(counter_ > 0);
+    sum_ = sum_ - val.to_double();
+    counter_--;
+  }
+};
+
+using max_group = min_max_group<std::greater<>>;
+using min_group = min_max_group<std::less<>>;
+
 template<typename GroupType>
 class counted_group {
 public:
@@ -45,6 +99,33 @@ private:
   size_t counter_;
 };
 
+template<>
+class counted_group<count_group> {
+public:
+  counted_group(const common::event_data &) : counter_(1) {}
+
+  bool empty() const { return counter_ == 0; }
+
+  template<typename H>
+  friend H AbslHashValue(H h, const counted_group<count_group> &arg) {
+    return H::combine(std::move(h), arg.counter_);
+  }
+
+  void add_event(const common::event_data &) { counter_++; }
+
+  void remove_event(const common::event_data &) {
+    assert(counter_ > 0);
+    counter_--;
+  }
+
+  common::event_data finalize_group() const {
+    return common::event_data::Int(static_cast<int64_t>(counter_));
+  }
+
+private:
+  size_t counter_;
+};
+
 template<typename GroupType>
 class grouped_state : public agg_base::grouped_state<counted_group<GroupType>> {
 public:
@@ -56,65 +137,6 @@ public:
     it->second.remove_event(val);
     if (it->second.empty())
       this->groups_.erase(it);
-  }
-};
-
-template<typename Compare>
-class min_max_group {
-public:
-  min_max_group(const common::event_data &first_event) {
-    group_state_.insert(first_event);
-  }
-
-  template<typename H>
-  friend H AbslHashValue(H h, const min_max_group<Compare> &arg) {
-    return H::combine(std::move(h), arg.group_state_);
-  }
-
-  void add_event(const common::event_data &val) { group_state_.insert(val); }
-
-  void remove_event(const common::event_data &val) { group_state_.erase(val); }
-
-  common::event_data finalize_group() const {
-    assert(!group_state_.empty());
-    return *group_state_.begin();
-  }
-
-private:
-  absl::btree_multiset<common::event_data, Compare> group_state_;
-};
-
-using max_group = min_max_group<std::greater<>>;
-using min_group = min_max_group<std::less<>>;
-
-class count_group : public agg_base::count_group {
-public:
-  count_group(const common::event_data &first_event)
-      : agg_base::count_group(first_event) {}
-
-  void remove_event(const common::event_data &) {
-    assert(counter_ > 0);
-    counter_--;
-  }
-};
-
-class sum_group : public agg_base::sum_group {
-public:
-  sum_group(const common::event_data &first_event)
-      : agg_base::sum_group(first_event) {}
-
-  void remove_event(const common::event_data &val) { res_ = res_ - val; }
-};
-
-class avg_group : public agg_base::avg_group {
-public:
-  avg_group(const common::event_data &first_value)
-      : agg_base::avg_group(first_value) {}
-
-  void remove_event(const common::event_data &val) {
-    assert(counter_ > 0);
-    sum_ = sum_ - val.to_double();
-    counter_--;
   }
 };
 
@@ -144,8 +166,7 @@ private:
   bool all_bound_;
 };
 
-class no_temporal_aggregation {
-};
+class no_temporal_aggregation {};
 
 }// namespace monitor::detail::agg_temporal
 

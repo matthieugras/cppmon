@@ -538,6 +538,8 @@ event_table_vec MState::MOr::eval(database &db, const ts_list &ts) {
 event_table_vec MState::MAnd::eval(database &db, const ts_list &ts) {
   auto reduction_fn = [this](const opt_table &tab1,
                              const opt_table &tab2) -> opt_table {
+    assert(!tab1 || !tab1->empty());
+    assert(!tab2 || !tab2->empty());
     if (const auto *anti_join_ptr = var2::get_if<anti_join_info>(&op_info)) {
       if (!tab1 || !tab2) {
         return tab1;

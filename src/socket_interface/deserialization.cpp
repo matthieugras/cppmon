@@ -18,7 +18,7 @@ deserializer::~deserializer() { ::unlink(path_.c_str()); }
 
 std::string deserializer::read_string() {
   // fmt::print("reading string\n");
-  auto str_len = read_primitive<size_t>();
+  auto str_len = static_cast<size_t>(read_primitive<int32_t>());
   // fmt::print("string length is {}\n", str_len);
   std::string res;
   res.insert(0, str_len, ' ');
@@ -45,7 +45,7 @@ void deserializer::read_tuple(database &db) {
   // fmt::print("reading event name\n");
   auto event_name = read_string();
   // fmt::print("event name is: {}\n", event_name);
-  auto arity = read_primitive<size_t>();
+  auto arity = static_cast<size_t>(read_primitive<int32_t>());
   // fmt::print("arity of event is {}\n", arity);
   auto p_key = std::pair(std::move(event_name), arity);
   auto p_it = pred_map_.find(p_key);
@@ -80,10 +80,10 @@ void deserializer::read_tuple_list(database &db) {
   }
 }
 
-void deserializer::send_latency_marker(int64_t wm) {
+void deserializer::send_latency_marker(int64_t lm) {
   // fmt::print("sending latency marker {}\n", wm);
   send_primitive(CTRL_LATENCY_MARKER);
-  send_primitive(wm);
+  send_primitive(lm);
 }
 
 void deserializer::send_eof() {
@@ -91,26 +91,25 @@ void deserializer::send_eof() {
   sock_.next_layer().shutdown(boost::asio::socket_base::shutdown_send);
 }
 
-deserializer::record_type deserializer::read_database(ts_database &ts_db,
-                                                      int64_t &wm) {
-  auto nxt_ctrl = read_primitive<control_bits>();
-  if (nxt_ctrl == CTRL_EOF) {
-    // fmt::print("read CMD eof\n");
-    return EOF_RECORD;
-  } else if (nxt_ctrl == CTRL_NEW_DATABASE) {
-    // fmt::print("read CMD new db\n");
-    auto ts = read_primitive<size_t>();
-    // fmt::print("db has ts {}\n", ts);
-    read_tuple_list(ts_db.first);
-    ts_db.second.push_back(ts);
-    return DB_RECORD;
-  } else if (nxt_ctrl == CTRL_LATENCY_MARKER) {
-    // fmt::print("read CMD latency marker\n");
-    wm = read_primitive<int64_t>();
-    // fmt::print("latency marker is {}\n", wm);
-    return LATENCY_RECORD;
-  } else {
-    throw std::runtime_error("expected database");
+std::optional<ts_database> deserializer::read_database() {
+  while (true) {
+    std::optional<ts_database> opt_db;
+    auto nxt_ctrl = read_primitive<control_bits>();
+    if (nxt_ctrl == CTRL_EOF) {
+      return opt_db;
+    } else if (nxt_ctrl == CTRL_NEW_DATABASE) {
+      ts_database db;
+      auto ts = static_cast<size_t>(read_primitive<int64_t>());
+      read_tuple_list(db.first);
+      db.second.push_back(ts);
+      opt_db.emplace(db);
+      return opt_db;
+    } else if (nxt_ctrl == CTRL_LATENCY_MARKER) {
+      int64_t lm = read_primitive<int64_t>();
+      send_latency_marker(lm);
+    } else {
+      throw std::runtime_error("expected database");
+    }
   }
 }
 }// namespace ipc::serialization

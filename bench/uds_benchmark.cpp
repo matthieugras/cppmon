@@ -24,17 +24,14 @@ int main(int argc, char *argv[]) {
   size_t num_dbs = 0;
   while (true) {
     // std::this_thread::sleep_for(10ms);
-    benchmark::DoNotOptimize(deser);
-    int64_t wm;
-    ipc::serialization::ts_database db;
-    auto ret = deser.read_database(db, wm);
-    benchmark::DoNotOptimize(ret);
-    if (ret == 0) {
+    auto opt_db = deser.read_database();
+    benchmark::DoNotOptimize(opt_db);
+    if (!opt_db) {
       fmt::print("received {} dbs\n", num_dbs);
-      break;
       deser.send_eof();
-    } else if (ret == 1) {
-      num_dbs += db.second.size();
+      break;
+    } else {
+      num_dbs += opt_db->second.size();
     }
   }
 }

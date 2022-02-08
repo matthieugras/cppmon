@@ -17,10 +17,11 @@ temporal_aggregation_impl::temporal_aggregation_impl(
   size_t trm_var = *trm_var_ptr;
   for (size_t idx = 0; idx < phi_layout.size(); ++idx) {
     size_t var = phi_layout[idx];
-    assert(!(var == trm_var && var >= num_bound_vars));
+    // assert(!(var == trm_var && var >= num_bound_vars));
     if (var == trm_var) {
       term_var_idx_ = idx;
-    } else if (var >= num_bound_vars) {
+    }
+    if (var >= num_bound_vars) {
       group_var_idxs_.push_back(idx);
       res_layout_.push_back(var - num_bound_vars);
       all_bound_ = false;

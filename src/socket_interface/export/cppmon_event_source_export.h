@@ -17,7 +17,7 @@ typedef struct ev_src_ctxt ev_src_ctxt;
 /*! Possible types of event arguments */
 typedef enum
 {
-  TY_INT,
+  TY_INT = 0x1,
   TY_FLOAT,
   TY_STRING
 } c_ev_ty;

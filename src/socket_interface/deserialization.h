@@ -26,19 +26,13 @@ using ts_database = std::pair<database, std::vector<size_t>>;
 
 class deserializer {
 public:
-  enum record_type
-  {
-    EOF_RECORD,
-    LATENCY_RECORD,
-    DB_RECORD
-  };
   deserializer(std::string socket_path, pred_map_t pred_map);
-  record_type read_database(ts_database &opt_db, int64_t &wm);
-  void send_latency_marker(int64_t wm);
+  std::optional<ts_database> read_database();
   void send_eof();
   ~deserializer();
 
 private:
+  void send_latency_marker(int64_t lm);
   template<typename T>
   T read_primitive() {
     T t{};

@@ -53,13 +53,14 @@ int main() {
   ev_src_init_flags flags = {
     .log_to_file = 0,
     .log_to_stdout = 0,
-    .unbounded_buf = 0
+    .online_monitoring = 1
   };
   ev_src_init_opts opts = {
     flags,
-    .wbuf_size = 6000,
-    .log_path = "input_log",
-    .uds_sock_path = NULL
+    .wbuf_size = 10,
+    .log_path = NULL,
+    .uds_sock_path = "cppmon",
+    .latency_tracking_path  = "lat_out"
   };
   ev_src_ctxt *ctx = ev_src_init(&opts);
 

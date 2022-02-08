@@ -188,6 +188,8 @@ namespace detail {
         ts_buf.insert(ts_buf.end(), ts.begin(), ts.end());
         auto reduction_fn = [this](opt_table &tab_l,
                                    opt_table &tab_r) -> opt_table {
+          assert(!tab_l || !tab_l->empty());
+          assert(!tab_r || !tab_r->empty());
           assert(!ts_buf.empty());
           size_t new_ts = ts_buf.front();
           ts_buf.pop_front();

@@ -8,9 +8,11 @@
 #include <future>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <serialization_types.h>
 #include <string_view>
+#include <queue>
 #include <thread>
 #include <vector>
 extern "C" {
@@ -90,8 +92,7 @@ private:
   }
 
   // Helper functions called from IO thread
-  enum submit_type
-  {
+  enum submit_type {
     NEW_DATA_EVENT = 0x1,
     DATA_WRITE,
     DATA_READ,
@@ -114,7 +115,9 @@ private:
     bool is_last;
     std::vector<char> data;
   };
-  rigtorp::SPSCQueue<q_elem> dat_q_;
+
+  std::queue<q_elem> dat_q_;
+  std::mutex mut_;
   int new_dat_fd_ = -1;
 
   // Owned by IO thread

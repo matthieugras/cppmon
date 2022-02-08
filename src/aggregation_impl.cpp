@@ -17,12 +17,14 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
       "only simple var terms are supported (as in monpoly)");
 
   size_t trm_var = *trm_var_ptr;
+  // fmt::print("agg_layout, trm_var: {}, phi_layout: {}, num_bound_vars: {}\n",
+  //            trm_var, phi_layout, num_bound_vars);
   for (size_t idx = 0; idx < phi_layout.size(); ++idx) {
     size_t var = phi_layout[idx];
-    assert(!(var == trm_var && var >= num_bound_vars));
     if (var == trm_var) {
       term_var_idx_ = idx;
-    } else if (var >= num_bound_vars) {
+    }
+    if (var >= num_bound_vars) {
       group_var_idxs_.push_back(idx);
       res_layout_.push_back(var - num_bound_vars);
       all_bound_ = false;
@@ -49,9 +51,10 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
 }
 
 opt_table aggregation_impl::eval(opt_table &tab) {
+  assert(!tab || !tab->empty());
   if (!tab && all_bound_)
     return event_table::singleton_table(default_val_);
-  if (tab) {
+  else if (tab) {
     assert(!tab->empty());
     for (const auto &e : *tab) {
       auto group = filter_row(group_var_idxs_, e);
