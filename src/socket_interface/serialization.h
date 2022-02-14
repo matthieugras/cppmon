@@ -42,10 +42,14 @@ int for_each_ring_event(F f, io_uring *ring) {
   io_uring_cqe *cqe;
   while (true) {
     int ret = io_uring_wait_cqe(ring, &cqe);
-    if (ret < 0)
-      return ret;
-    if (cqe->res < 0)
-      return cqe->res;
+    if (ret < 0) {
+      errno = -ret;
+      return -1;
+    }
+    if (cqe->res < 0) {
+      errno = -cqe->res;
+      return -1;
+    }
     if (!f(static_cast<int>(cqe->res),
            reinterpret_cast<void *>(cqe->user_data))) {
       io_uring_cqe_seen(ring, cqe);

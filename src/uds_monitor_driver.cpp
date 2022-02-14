@@ -15,13 +15,11 @@ uds_monitor_driver::uds_monitor_driver(
 
 void uds_monitor_driver::do_monitor() {
   while (true) {
-    ipc::serialization::ts_database tdb;
     auto opt_db = deser_->read_database();
     if (opt_db) {
       auto &[db, ts] = *opt_db;
       auto sats = monitor_.step(db, ts);
       printer_.print_verdict(sats);
-      break;
     } else {
       auto sats = monitor_.last_step();
       printer_.print_verdict(sats);
