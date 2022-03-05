@@ -15,3 +15,8 @@ set(DIFFERENTIAL_TEST_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(abtest differential_test_tool.cpp differential_test.cpp)
 target_include_directories(abtest PRIVATE ${DIFFERENTIAL_TEST_INCLUDES})
 target_link_libraries(abtest CONAN_PKG::fmt CONAN_PKG::abseil CONAN_PKG::boost)
+
+add_executable(fo_gen fo_gen.cpp)
+target_include_directories(fo_gen PRIVATE ${DIFFERENTIAL_TEST_INCLUDES})
+target_link_libraries(fo_gen CONAN_PKG::fmt CONAN_PKG::abseil)
+install(TARGETS fo_gen)
