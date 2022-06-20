@@ -8,6 +8,7 @@
 #include <future>
 #include <list>
 #include <memory>
+#include <array>
 #include <mutex>
 #include <optional>
 #include <serialization_types.h>

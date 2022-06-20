@@ -259,15 +259,20 @@ MState::init_pair MState::init_eq_state(const fo::Formula::eq_t &arg) {
   const auto *lcst = l.get_if_const(), *rcst = r.get_if_const();
   if (lcst && rcst) {
     if (*lcst == *rcst)
-      return {MRel{event_table::unit_table()}, {}};
+      return {MRel{event_table::unit_table()}, std::vector<size_t>()};
     else
-      return {MRel{{}}, {}};
+      return {MRel{{}}, std::vector<size_t>()};
   }
   assert(l.is_var() && rcst || lcst && r.is_var());
-  if (l.is_var())
-    return {MRel{event_table::singleton_table(*rcst)}, {*l.get_if_var()}};
-  else
-    return {MRel{event_table::singleton_table(*lcst)}, {*r.get_if_var()}};
+  if (l.is_var()) {
+    std::vector<size_t> vars;
+    vars.push_back(*l.get_if_var());
+    return {MRel{event_table::singleton_table(*rcst)}, vars};
+  } else {
+    std::vector<size_t> vars;
+    vars.push_back(*r.get_if_var());
+    return {MRel{event_table::singleton_table(*lcst)}, vars};
+  }
 }
 
 MState::init_pair MState::init_and_join_state(const fo::Formula &phil,
@@ -393,9 +398,9 @@ MState::init_pair MState::init_mstate(const Formula &formula) {
     if constexpr (is_same_v<T, fo::Formula::neg_t>) {
       if (arg.phi->fvs().empty()) {
         auto rec_st = init_mstate(*arg.phi).first;
-        return {MNeg{uniq(std::move(rec_st))}, {}};
+        return {MNeg{uniq(std::move(rec_st))}, std::vector<std::size_t>()};
       } else {
-        return {MRel{{}}, {}};
+        return {MRel{{}}, std::vector<size_t>()};
       }
     } else if constexpr (is_same_v<T, fo::Formula::eq_t>) {
       return init_eq_state(arg);
