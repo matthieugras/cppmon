@@ -107,7 +107,7 @@ struct [[maybe_unused]] fmt::formatter<common::event_data> {
 
   template<typename FormatContext>
   auto format
-    [[maybe_unused]] (const common::event_data &tab, FormatContext &ctx)
+    [[maybe_unused]] (const common::event_data &tab, FormatContext &ctx) const
     -> decltype(ctx.out()) {
     if (tab.tag == common::event_data::HOLDS_INT) {
       return format_to(ctx.out(), "{}", tab.i);

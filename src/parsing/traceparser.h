@@ -386,7 +386,7 @@ struct [[maybe_unused]] fmt::formatter<
 
   template<typename FormatContext>
   auto format [[maybe_unused]] (const parse::monpoly_fmt<T> &arg_wrapper,
-                                FormatContext &ctx) -> decltype(auto) {
+                                FormatContext &ctx) const -> decltype(auto) {
     using parse::monpoly_fmt;
     const auto &arg = arg_wrapper.t;
     if constexpr (std::is_same_v<T, parse::database_tuple>) {

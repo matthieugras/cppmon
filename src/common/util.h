@@ -92,7 +92,7 @@ struct [[maybe_unused]] fmt::formatter<std::optional<T>> {
   }
 
   template<typename FormatContext>
-  auto format [[maybe_unused]] (const std::optional<T> &opt, FormatContext &ctx)
+  auto format [[maybe_unused]] (const std::optional<T> &opt, FormatContext &ctx) const
   -> decltype(ctx.out()) {
     if (opt)
       return format_to(ctx.out(), "{}", *opt);
