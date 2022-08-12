@@ -20,6 +20,7 @@ namespace {
 
 class event_data : boost::equality_comparable<event_data> {
   friend ::fmt::formatter<event_data>;
+  friend struct compat_less;
 
 public:
   event_data();
@@ -92,6 +93,25 @@ private:
     std::string *s;
   };
 };
+
+struct compat_less {
+  bool operator()(const event_data &a, const event_data &b) {
+    if (a.tag == event_data::HOLDS_FLOAT && b.tag == event_data::HOLDS_FLOAT) {
+      if (a.d != a.d) {
+        // a is NaN, hence a is less than b unless b is NaN
+        return b.d == b.d;
+      } else if (b.d != b.d) {
+        // b is NaN but a is not, hence b is less
+        return false;
+      } else {
+        return a.d < b.d;
+      }
+    } else {
+      return a < b;
+    }
+  }
+};
+
 }// namespace common
 
 template<>

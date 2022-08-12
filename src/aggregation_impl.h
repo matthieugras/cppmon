@@ -2,6 +2,7 @@
 #define CPPMON_AGGREGATION_IMPL_H
 
 #include <absl/container/flat_hash_map.h>
+#include <algorithm>
 #include <boost/variant2/variant.hpp>
 #include <fmt/core.h>
 #include <formula.h>
@@ -133,6 +134,36 @@ protected:
   size_t counter_;
 };
 
+class med_group {
+public:
+  med_group(const common::event_data &first_event)
+      : values_{first_event} {}
+
+  template<typename H>
+  friend H AbslHashValue(H h, const med_group &arg) {
+    return H::combine(std::move(h), arg.values_);
+  }
+
+  void add_event(const common::event_data &val) {
+    values_.emplace_back(val);
+  }
+
+  common::event_data finalize_group() {
+    std::sort(values_.begin(), values_.end(), common::compat_less());
+    size_t n = values_.size();
+    if (n % 2 == 0) {
+      double med =
+        (values_.at(n/2).to_double() + values_.at(n/2 - 1).to_double()) / 2.0;
+      return common::event_data::Float(med);
+    } else {
+      return common::event_data::Float(values_.at(n/2).to_double());
+    }
+  }
+
+protected:
+  std::vector<common::event_data> values_;
+};
+
 class aggregation_impl {
 public:
   aggregation_impl(const table_layout &phi_layout, const fo::Term &agg_term,
@@ -146,7 +177,8 @@ private:
     boost::variant2::variant<grouped_state<count_group>,
                              grouped_state<avg_group>, grouped_state<max_group>,
                              grouped_state<min_group>,
-                             grouped_state<sum_group>>;
+                             grouped_state<sum_group>,
+                             grouped_state<med_group>>;
   common::event_data default_val_;
   std::vector<size_t> group_var_idxs_;
   size_t nfvs_;

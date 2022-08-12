@@ -46,6 +46,8 @@ aggregation_impl::aggregation_impl(const table_layout &phi_layout,
     state_ = grouped_state<count_group>();
   else if (ty == fo::agg_type::AVG)
     state_ = grouped_state<avg_group>();
+  else if (ty == fo::agg_type::MED)
+    state_ = grouped_state<med_group>();
   else
     throw std::runtime_error("unsupported operation");
 }

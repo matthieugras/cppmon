@@ -136,7 +136,7 @@ private:
 
   struct string_arg : lexy::token_production {
     using res_type = std::string;
-    RULE dsl::quoted(dsl::code_point - dsl::ascii::control,
+    RULE dsl::quoted(dsl::byte - dsl::ascii::control,
                      dsl::backslash_escape.capture(dsl::lit_c<'"'> /
                                                    dsl::lit_c<'\\'>));
     VALUE lexy::as_string<std::string>;
@@ -202,7 +202,8 @@ private:
           return;
         auto lexeme = maybe_lexeme.value();
         if (ty == INT_TYPE) {
-          const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+          const auto *fst = reinterpret_cast<const char *>(lexeme.data());
+          const auto *lst = fst + lexeme.size();
           int64_t int_val;
           auto [new_ptr, ec] = std::from_chars(fst, lst, int_val);
           if (ec != std::errc() /* || new_ptr != lst */) {
@@ -213,7 +214,8 @@ private:
           }
           tup.emplace_back(common::event_data::Int(int_val));
         } else {
-          const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+          const auto *fst = reinterpret_cast<const char *>(lexeme.data());
+          const auto *lst = fst + lexeme.size();
           double double_val;
           auto [new_ptr, ec] = std::from_chars(fst, lst, double_val);
           if (ec != std::errc() /* || new_ptr != lst */) {
@@ -338,7 +340,8 @@ private:
   struct ts_parse : lexy::token_production {
     RULE dsl::capture(dsl::digits<>);
     VALUE lexy::callback<size_t>([](auto lexeme) -> size_t {
-      const auto *fst = lexeme.data(), *lst = fst + lexeme.size();
+      const auto *fst = reinterpret_cast<const char *>(lexeme.data());
+      const auto *lst = fst + lexeme.size();
       size_t ts;
       auto [new_ptr, ec] = std::from_chars(fst, lst, ts);
       if (ec != std::errc() || new_ptr != lst)
